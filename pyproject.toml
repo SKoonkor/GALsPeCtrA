@@ -1,0 +1,13 @@
+[project]
+name = "galspectra"
+version = "0.1.0"
+description = "SED generation and analysis pipeline using FSPS"
+authors = [{name="Suttikoon"}]
+dependencies = [
+    "numpy",
+    "scipy",
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"

@@ -1,6 +1,10 @@
+from pathlib import Path
 import numpy as np
 
 def save_sed_grid(filename, sed_dict):
+    filename = Path(filename)
+
+    filename.parent.mkdir(parents=True, exist_ok=True)
     np.savez(
             filename,
             wave=sed_dict["wave"],

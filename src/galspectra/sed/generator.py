@@ -38,7 +38,7 @@ def generate_seds(param_dict, sp, verbose=True):
     seds = []
 
     for i in range(n_samples):
-        params = dict(zip(params_names, samples[i]))
+        params = dict(zip(param_names, samples[i]))
 
         # Update FSPS parameters
         for key, val in params.items():
@@ -53,7 +53,7 @@ def generate_seds(param_dict, sp, verbose=True):
 
         seds.append(sed)
 
-        if verbose and i%max(1, n_samples // 50) == 0:
+        if verbose and i%max(1, n_samples // 100) == 0:
             print (f"\rProgress: {int(i/n_samples*100)}%", end="")
 
     if verbose:
