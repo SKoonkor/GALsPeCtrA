@@ -33,7 +33,11 @@ def generate_lhs_grid(params, n_samples=200, seed=None):
         if p["spacing"] == "log":
             scaled[:, i] = 10**scaled[:, i]
 
-    return scaled
+    # return scaled
+    return {
+            "samples": scaled,
+            "param_names": [p["name"] for p in params]
+            }
 
 def generate_cartesian_grid(params, grid_sizes):
     """
@@ -63,7 +67,11 @@ def generate_cartesian_grid(params, grid_sizes):
     # Cartesian product (N-dim)
     grid = np.array(list(product(*value_axes)))
 
-    return grid
+    # return grid
+    return {
+            "samples": grid,
+            "param_names": [p["name"] for p in params]
+            }
 
 
 
@@ -74,21 +82,21 @@ def generate_cartesian_grid(params, grid_sizes):
 
 # Test ZONE
 
-# params = [
-#         {"name": "tage", "min": 1e-4, "max": 13.8, "spacing": "linear"},
-#         {"name": "Z", "min": 0.012, "max": 0.03, "spacing": "linear"},
-#         ]
-# 
-# scaled_lhs = generate_lhs_grid(params=params, n_samples=10)
-# scaled_cartesian = generate_cartesian_grid(params=params, grid_sizes = [5, 2])
-# 
-# print ("\nLHS")
-# print (scaled_lhs)
-# print ("\nCartesian")
-# print (scaled_cartesian)
-# 
-# 
-# 
-# 
-# scaled_lhs = []
-# scaled_cartesian = []
+params = [
+        {"name": "tage", "min": 1e-4, "max": 13.8, "spacing": "linear"},
+        {"name": "Z", "min": 0.012, "max": 0.03, "spacing": "linear"},
+        ]
+
+scaled_lhs = generate_lhs_grid(params=params, n_samples=10)
+scaled_cartesian = generate_cartesian_grid(params=params, grid_sizes = [5, 2])
+
+print ("\nLHS")
+print (scaled_lhs)
+print ("\nCartesian")
+print (scaled_cartesian)
+
+
+
+
+scaled_lhs = []
+scaled_cartesian = []
