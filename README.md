@@ -24,4 +24,26 @@ You must define the `SPS_HOME` environment variable pointing to the _FSPS_ insta
 ``` Bash
 export SPS_HOME=/path/to/fsps
 ```
+To make this persistent, add it to your shell config:
+``` Bash
+# For bash
+echo 'export SPS_HOME=/path/to/fsps' >> ~/.bashrc  
+
+# For zsh
+echo 'export SPS_HOME=/path/to/fsps' >> ~/.zshrc
+```
+
+3. Install Python bindings  
+``` Bash
+pip install fsps
+```
+
+4. Verify installation  
+``` Python
+import fsps
+sp = fsps.StellarPopulation()
+wave, spec = sp.get_spectrum(tage=1.0)
+```  
+If this runs without error, the installation is successful.
+
 
