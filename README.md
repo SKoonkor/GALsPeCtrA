@@ -3,5 +3,6 @@ This repository is for essential calculations for reconstruction of synthetic ga
 
 
 # Requirements
-numpy==2.4.4 \\
+numpy==2.4.4 
+
 scipy==1.17.1
