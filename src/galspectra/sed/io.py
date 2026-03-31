@@ -24,3 +24,13 @@ def load_sed_grid(filename):
             "param_names": list(data["param_names"]),
             "config": data.get("config", None), 
     }
+
+
+def save_pca_results(filename, pca_dict):
+    np.savez(
+            filename,
+            coeffs=pca_dict["coeffs"],
+            components=pca_dict["components"],
+            variance=pca_dict["variance"],
+            mean=pca_dict["mean"],
+            )

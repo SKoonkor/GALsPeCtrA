@@ -15,7 +15,7 @@ def compute_pca(seds, n_components=20):
     pca = PCA(n_components = n_components)
 
     coeffs = pca.fit_transform(seds)
-    components = pca.componets_
+    components = pca.components_
     variance = pca.explained_variance_ratio_
 
     return {
