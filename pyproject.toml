@@ -11,3 +11,6 @@ dependencies = [
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
+
+[project.scripts]
+galspectra = "galspectra.cli:main"
