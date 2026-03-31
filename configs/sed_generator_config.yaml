@@ -1,0 +1,17 @@
+paramgrid:
+  type: lhs
+  n_samples: 100
+
+  parameters:
+    - name: tage
+      min: -4
+      max: 1.137
+      spacing: log
+
+fsps:
+  logzsol: 0.0
+  zcontinuous: 1
+  sfh: 0
+
+output:
+  file: data/sed_grid.npz

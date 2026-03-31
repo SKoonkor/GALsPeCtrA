@@ -1,7 +1,7 @@
 from pathlib import Path
 import numpy as np
 
-def save_sed_grid(filename, sed_dict):
+def save_sed_grid(filename, sed_dict, config=None):
     filename = Path(filename)
 
     filename.parent.mkdir(parents=True, exist_ok=True)
@@ -11,6 +11,7 @@ def save_sed_grid(filename, sed_dict):
             seds=sed_dict["seds"],
             params=sed_dict["params"],
             param_names=sed_dict["param_names"],
+            config=config
             )
 
 def load_sed_grid(filename):
@@ -21,4 +22,5 @@ def load_sed_grid(filename):
             "seds": data["seds"],
             "params": data["params"],
             "param_names": list(data["param_names"]),
+            "config": data.get("config", None), 
     }

@@ -5,6 +5,7 @@ from galspectra.sampling.paramgrid import generate_lhs_grid
 from galspectra.sps.fsps_backend import create_stellar_population
 from galspectra.sed.generator import generate_seds
 from galspectra.sed.io import save_sed_grid
+from galspectra.config import load_config
 
 
 def main():
@@ -18,6 +19,8 @@ def main():
     # generate command
     gen = subparsers.add_parser("generate", help="Generate SED grid")
 
+    gen.add_argument("--config", type=str, help="Path to YAML config file")
+
     gen.add_argument("--n-samples", type=int, default=100,
                      help="Number of samples in parameter grid")
 
@@ -26,7 +29,6 @@ def main():
 
     gen.add_argument("--output", type=str, default="data/sed_grid.npz",
                      help="Output file path relative to project root")
-
 
     args = parser.parse_args()
 
@@ -42,22 +44,30 @@ def run_generate(args):
     # Resolve project root
     PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-    OUTPUT_PATH = PROJECT_ROOT/args.output
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if args.config:
+        config = load_config(args.config)
+        print(f"load config: {args.config}")
+    else:
+        raise ValueError("You must provide --config")
 
-    print (f"Output will be save to: {OUTPUT_PATH}")
 
-    # Parameter definition
-    params = [
-            {"name": "tage", "min":-4, "max": 1.136, "spacing": "log"},
-            ]
+    pg = config["paramgrid"]
 
-    param_dict = generate_lhs_grid(params, n_samples=args.n_samples)
+    params = pg["parameters"]
 
-    print (f"Generate {args.n_samples} parameter samples")
+    if pg["type"] == "lhs":
+        param_dict = generate_lhs_grid(
+                params,
+                n_samples=pg.get("n_samples", 100)
+                )
+    else:
+        raise NotImplementedError("Only LHS currently supported")
 
+    print (f"Generated {len(param_dict['samples'])} samples")
 
     # FSPS
+    fsps_cfg = config.get("fsps", {})
+
     sp = create_stellar_population(logzsol=args.logzsol)
     print ("FSPS initialised")
 
@@ -65,8 +75,11 @@ def run_generate(args):
     sed_data = generate_seds(param_dict, sp)
 
     # Save SEDs
-    save_sed_grid(OUTPUT_PATH, sed_data)
+    OUTPUT_FILE = config["output"]["file"]
+    OUTPUT_PATH = PROJECT_ROOT/OUTPUT_FILE
 
-    print ("\nDone.")
+    save_sed_grid(OUTPUT_PATH, sed_data, config=config)
+
+    print (f"\nSaved SEDs to: {OUTPUT_PATH}")
 
 
