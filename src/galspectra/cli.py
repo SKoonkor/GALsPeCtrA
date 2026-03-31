@@ -39,6 +39,34 @@ def main():
 
 def run_generate(args):
 
-    print ("Test run")
+    # Resolve project root
+    PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+    OUTPUT_PATH = PROJECT_ROOT/args.output
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    print (f"Output will be save to: {OUTPUT_PATH}")
+
+    # Parameter definition
+    params = [
+            {"name": "tage", "min":-4, "max": 1.136, "spacing": "log"},
+            ]
+
+    param_dict = generate_lhs_grid(params, n_samples=args.n_samples)
+
+    print (f"Generate {args.n_samples} parameter samples")
+
+
+    # FSPS
+    sp = create_stellar_population(logzsol=args.logzsol)
+    print ("FSPS initialised")
+
+    # Generate SEDs
+    sed_data = generate_seds(param_dict, sp)
+
+    # Save SEDs
+    save_sed_grid(OUTPUT_PATH, sed_data)
+
+    print ("\nDone.")
 
 
