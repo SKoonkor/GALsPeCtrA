@@ -33,4 +33,6 @@ def save_pca_results(filename, pca_dict):
             components=pca_dict["components"],
             variance=pca_dict["variance"],
             mean=pca_dict["mean"],
+            wave=pca_dict["wave"],
+            norm=pca_dict["norm"],
             )
