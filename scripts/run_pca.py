@@ -14,6 +14,9 @@ OUTPUT_FILE = PROJECT_ROOT / "data/pca_results.npz"
 # Load SEDs
 print ("\nLoading SEDs")
 data = load_sed_grid(INPUT_FILE)
+
+print (data.keys())
+
 wave = data["wave"]
 seds = data["seds"]
 print (f"Loaded SEDs: {seds.shape}")

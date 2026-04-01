@@ -5,9 +5,9 @@ This repository is for essential calculations for reconstruction of synthetic ga
 # Requirements
 numpy==2.4.4   
 scipy==1.17.1  
-fsps==0.4.7
-PyYAML==6.0.3
-scikit-learn==1.8.0
+fsps==0.4.7  
+PyYAML==6.0.3  
+scikit-learn==1.8.0  
 
 # FSPS Installation Guide
 This project relies on <a href="https://github.com/cconroy20/fsps"><it>FSPS</it></a> via its Python interface <a href="https://dfm.io/python-fsps/current/">python-fsps</a>.  
