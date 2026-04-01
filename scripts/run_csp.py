@@ -28,7 +28,7 @@ ssp_ages = pca["params"][:, 0] # tage
 t = np.linspace(0, 10, 200)
 
 sfh = build_sfh(t, [
-    {"type": "tua", "T0": 0.5, "tau": 2.0}
+    {"type": "tau", "T0": 0.5, "tau": 2.0}
     ])
 
 # Define SSP bins

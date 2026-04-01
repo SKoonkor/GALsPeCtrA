@@ -37,6 +37,10 @@ pca_dict = compute_pca(seds_norm, n_components=20)
 # Add metadata
 pca_dict["norm"] = norm_meta
 pca_dict["wave"] = wave
+pca_dict["params"] = data["params"]
+pca_dict["param_names"] = data["param_names"]
+pca_dict["config"] = data["config"]
+
 
 # Save
 print ("\nSaving PCA results")

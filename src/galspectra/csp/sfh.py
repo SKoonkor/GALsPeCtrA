@@ -1,7 +1,7 @@
 import numpy as np
 
 def sfh_tau(t, T0, tau):
-    return np.where(t > T0, np.exp(-(t - T0)/tay), 0.0)
+    return np.where(t > T0, np.exp(-(t - T0)/tau), 0.0)
 
 def sfh_delayed_tau(t, T0, tau):
     return (t - T0) * sfh_tau(t, T0, tau)
@@ -30,7 +30,7 @@ def build_sfh(t, components, mass_norm=True):
             val = sfh_delayed_tau(t, comp["T0"], comp["tau"])
         elif typ == "lognormal":
             val = sfh_lognormal(t, comp["T0"], comp["tau"])
-        elif val == "burst":
+        elif typ == "burst":
             val = sfh_burst(t, comp["tburst"], comp.get("sigma", 0.05))
         else:
             raise ValueError(f"Unkown SFH type: {typ}")

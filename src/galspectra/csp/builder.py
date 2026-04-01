@@ -30,7 +30,7 @@ def build_csp_coefficients(
         ## Will need to be updated
         ##   - to interpolation in age
         ##   - to interpolation in age and metallicity 
-        idx = np.argmin(np.abs(ssp_ages - age))   
+        idx = np.argmin(np.abs(ssp_age - age))   
         
 
         csp += mass * ssp_coeffs[idx]

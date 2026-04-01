@@ -31,7 +31,7 @@ def compute_mass_bins(t_sfh, sfr, age_edges):
         t_local = t_sfh[mask]
         sfr_local = sfr[mask]
 
-        mass[i] = np.trapz(sfr_local, t_local)
+        mass[i] = np.trapezoid(sfr_local, t_local)
 
     return mass
 

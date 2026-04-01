@@ -35,4 +35,6 @@ def save_pca_results(filename, pca_dict):
             mean=pca_dict["mean"],
             wave=pca_dict["wave"],
             norm=pca_dict["norm"],
+            params=pca_dict["params"],
+            param_names=pca_dict["param_names"],
             )
