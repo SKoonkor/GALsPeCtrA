@@ -1,20 +1,20 @@
 import numpy as np
 
 def build_csp_coefficients(
-        ssp_age,
-        ssp_coeffs,
+        interpolator,
         target_ages,
-        mass_weights
-        ):
+        target_Z,
+        mass_weights):
     """
     Build CSP in PCA space.
 
     Parameters
     ----------
-    ssp_age: (N_ssp, )
-    ssp_coeffs : (N_ssp, N_pc)
-    target_ages : (N_bin, )
+    interpolator: function
+        The interpolation function to interpolate the age and metallicity coeff grid
+    target_ages: (N_bins, )
         Ages corresponding to each mass bin
+    target_Z : (N_bin, ) or scalar
     mass_weights : (N_bin, )
 
     Returns
@@ -22,17 +22,15 @@ def build_csp_coefficients(
     csp_coeffs : (N_pc, )
     """
 
-    n_pc = ssp_coeffs.shape[1]
-    csp = np.zeros(n_pc)
+    N_pc = interpolator.N_pc
+    csp_coeffs = np.zeros(N_pc)
 
-    for age, mass in zip(target_ages, mass_weights):
-        # Find nearest SSP
-        ## Will need to be updated
-        ##   - to interpolation in age
-        ##   - to interpolation in age and metallicity 
-        idx = np.argmin(np.abs(ssp_age - age))   
-        
+    for i in range(len(target_ages)):
+        age = target_ages[i]
+        Z = target_Z[i] if np.ndim(target_Z) > 0 else target_z
 
-        csp += mass * ssp_coeffs[idx]
+        coeff = interpolator.get_coeffs(age, Z)
 
-    return csp
+        csp_coeffs += mass_weights[i] * coeff
+
+    return csp_coeffs
