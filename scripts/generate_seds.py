@@ -17,6 +17,7 @@ OUTPUT_FILE = DATA_DIR/"sed_grid.npz"
 
 params = [
         {"name": "tage", "min": -4, "max": 1.137, "spacing": "log"},
+        {"name": "logzsol", "min": -1, "max": 0.1, "spacing": "linear"}
         ]
 
 print ("\nGenerating parameter grid")

@@ -19,7 +19,7 @@ pca = np.load(PROJECT_ROOT / "data/pca_results.npz", allow_pickle=True) # Flatte
 
 coeffs = pca["coeffs"]
 params = pca["params"]
-param_names = pca["param_names"]
+param_names = list(pca["param_names"])
 print ("Loaded coeffs shape:", coeffs.shape)
 
 
