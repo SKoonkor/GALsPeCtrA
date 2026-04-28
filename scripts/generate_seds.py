@@ -1,7 +1,7 @@
 from pathlib import Path
 import time
 
-from galspectra.sampling.paramgrid import generate_lhs_grid
+from galspectra.sampling.paramgrid import generate_lhs_grid, generate_cartesian_grid
 from galspectra.sps.fsps_backend import create_stellar_population
 from galspectra.sed.generator import generate_seds
 from galspectra.sed.io import save_sed_grid
@@ -17,11 +17,13 @@ OUTPUT_FILE = DATA_DIR/"sed_grid.npz"
 
 params = [
         {"name": "tage", "min": -4, "max": 1.137, "spacing": "log"},
-        {"name": "logzsol", "min": -1, "max": 0.1, "spacing": "linear"}
+        {"name": "logzsol", "min": -3, "max": 0, "spacing": "linear"},
         ]
 
 print ("\nGenerating parameter grid")
-param_dict = generate_lhs_grid(params, n_samples = 1000)
+# param_dict = generate_lhs_grid(params, n_samples = 1000)
+param_dict = generate_cartesian_grid(params, grid_sizes = (50, 3)) 
+print (param_dict)
 
 print ("\nInitiating stellar population synthesis")
 sp = create_stellar_population(logzsol = 0.0)

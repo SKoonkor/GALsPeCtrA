@@ -27,6 +27,8 @@ def build_param_grid(params, coeffs, param_names):
         raise ValueError("param_names must contain 'tage' and 'logzsol'")
 
     # get parameters
+    print (params.shape)
+    print (params[0:10])
     ages = params[:, age_idx]
     Zs = params[:, z_idx]
 
@@ -68,4 +70,3 @@ def build_param_grid(params, coeffs, param_names):
         raise ValueError(f"Incomplete grid: missing entries at indices {missing}")
 
     return ages_unique, Z_unique, coeff_grid
-
