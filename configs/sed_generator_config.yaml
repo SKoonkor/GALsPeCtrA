@@ -1,17 +1,31 @@
+# FSPS SED grid configuration
+# Grid: 200 ages × 6 metallicities = 1200 SSPs
+# Metallicity range matches BC03's 6 bins for cross-backend comparison.
+
 paramgrid:
-  type: lhs
-  n_samples: 100
+  type: cartesian
+  grid_sizes: [200, 6]
 
   parameters:
     - name: tage
-      min: -4
+      min: -4.0
       max: 1.137
       spacing: log
 
+    - name: logzsol
+      min: -2.301   # log10(0.0001/0.02) — match BC03 low end
+      max:  0.398   # log10(0.05/0.02)   — match BC03 high end
+      spacing: linear
+
 fsps:
-  logzsol: 0.0
   zcontinuous: 1
-  sfh: 0
+  sfh: 0            # SSP mode
+  add_dust_emission: False
+  add_neb_emission: False
+
+wavelength:
+  min: 912    # Lyman limit (Å)
+  max: 25000  # near-IR (Å)
 
 output:
-  file: data/sed_grid.npz
+  file: data/sed_grid_fsps_v2.npz

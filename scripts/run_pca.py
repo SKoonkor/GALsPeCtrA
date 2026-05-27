@@ -1,3 +1,4 @@
+import argparse
 from pathlib import Path
 import numpy as np
 
@@ -8,8 +9,21 @@ from galspectra.sed.io import save_pca_results
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-INPUT_FILE = PROJECT_ROOT / "data/sed_grid.npz"
-OUTPUT_FILE = PROJECT_ROOT / "data/pca_results.npz"
+parser = argparse.ArgumentParser(description="Run PCA on an SSP SED grid")
+parser.add_argument("--input",       default=str(PROJECT_ROOT / "data/sed_grid.npz"),
+                    help="Input SED grid .npz file")
+parser.add_argument("--output",      default=str(PROJECT_ROOT / "data/pca_results.npz"),
+                    help="Output PCA results .npz file")
+parser.add_argument("--n-components", type=int, default=50,
+                    help="Number of PCA components to keep (default 50)")
+parser.add_argument("--wave-min",    type=float, default=3000.0,
+                    help="Minimum wavelength to include in PCA (Å, default 3000)")
+parser.add_argument("--wave-max",    type=float, default=10000.0,
+                    help="Maximum wavelength to include in PCA (Å, default 10000)")
+args = parser.parse_args()
+
+INPUT_FILE  = Path(args.input)
+OUTPUT_FILE = Path(args.output)
 
 # Load SEDs
 print ("\nLoading SEDs")
@@ -21,9 +35,9 @@ wave = data["wave"]
 seds = data["seds"]
 print (f"Loaded SEDs: {seds.shape}")
 
-# Mask wavelength (optional)
+# Mask wavelength
 print ("\nMasking wavelength")
-wave, seds = mask_wavelength(wave, seds, 3000, 10000)
+wave, seds = mask_wavelength(wave, seds, args.wave_min, args.wave_max)
 print (f"After masking: {seds.shape}")
 
 # Normalize
@@ -32,7 +46,7 @@ seds_norm, norm_meta = normalize_seds(seds, method="std", wave=wave)
 
 # PCA
 print ("\nRunning PCA on normalized SEDs")
-pca_dict = compute_pca(seds_norm, n_components=20)
+pca_dict = compute_pca(seds_norm, n_components=args.n_components)
 
 # Add metadata
 pca_dict["norm"] = norm_meta

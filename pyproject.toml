@@ -1,12 +1,15 @@
 [project]
 name = "galspectra"
 version = "0.1.0"
-description = "SED generation and analysis pipeline using FSPS"
+description = "SED generation and PCA-based analysis pipeline for galaxy spectra"
 authors = [{name="Suttikoon"}]
 dependencies = [
     "numpy",
     "scipy",
-    "pyyaml"
+    "scikit-learn",
+    "pyyaml",
+    "astropy",
+    "matplotlib",
 ]
 
 [build-system]

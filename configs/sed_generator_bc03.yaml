@@ -1,0 +1,33 @@
+# BC03 SED grid configuration
+# Uses BC03 FullSED files from the L-GALAXIES SpecPhotTables directory.
+#
+# Grid: 200 ages × 6 metallicities = 1200 SSPs (matches BC03's native grid)
+# This matches the 6 BC03 metallicities: Z = 0.0001, 0.0004, 0.004, 0.008, 0.02, 0.05
+# which map to logzsol = -2.30, -1.70, -0.70, -0.40, 0.00, +0.40
+
+paramgrid:
+  type: cartesian
+  grid_sizes: [200, 6]
+
+  parameters:
+    - name: tage
+      min: -4.0
+      max: 1.137
+      spacing: log
+
+    - name: logzsol
+      min: -2.301   # log10(0.0001/0.02)
+      max:  0.398   # log10(0.05/0.02)
+      spacing: linear
+
+bc03:
+  # Absolute path to the directory containing BC03_Chabrier_FullSED_m*.dat files
+  # Update this path to match your local L-GALAXIES installation
+  dir: /Users/suteepornz/Documents/Suttikoon/Research_Projects/L-GALAXIES/LGalaxies2020_PublicRepository-master/SpecPhotTables/FullSEDs
+
+wavelength:
+  min: 912    # Lyman limit (Å) — exclude ionising continuum
+  max: 25000  # near-IR cutoff (Å)
+
+output:
+  file: data/sed_grid_bc03.npz
