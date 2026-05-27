@@ -41,7 +41,7 @@ For the FSPS backend, [python-fsps](https://dfm.io/python-fsps/current/) is also
 Install the package and its dependencies:
 
 ```bash
-git clone https://github.com/<your-username>/GALsPeCtrA.git
+git clone https://github.com/SKoonkor/GALsPeCtrA.git
 cd GALsPeCtrA
 pip install -e .
 ```
