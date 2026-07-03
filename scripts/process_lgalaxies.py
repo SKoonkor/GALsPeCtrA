@@ -20,6 +20,7 @@ Outputs:
 Usage:
   cd /path/to/GALsPeCtrA
   python scripts/process_lgalaxies.py [--backend fsps|bc03] [--n-gals N] [--no-dust]
+  python scripts/process_lgalaxies.py --add-nebular      # include nebular emission
 
 Requirements:
   - PCA results file must exist (run run_pca.py first)
@@ -36,7 +37,7 @@ import numpy as np
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 LGAL_ROOT    = PROJECT_ROOT.parent / "L-GALAXIES" / "LGalaxies2020_PublicRepository-master"
 
-SAMPLE_FILE = LGAL_ROOT / "output/samples/Planck_Mil-I_snapshots_default_test3_z0.00-0.00_All.npy"
+SAMPLE_FILE = LGAL_ROOT / "output/samples/Planck_Mil-II_snapshots_default_test1_z0.00-0.00_All.npy"
 SFH_FITS    = LGAL_ROOT / "AuxCode/Python/Database_SFH_table.fits"
 FILTER_DIR  = LGAL_ROOT / "SpecPhotTables/Filters"
 
@@ -60,6 +61,10 @@ def parse_args():
     p.add_argument("--no-photometry", action="store_true")
     p.add_argument("--no-dust",       action="store_true",
                    help="Skip dust attenuation (compute intrinsic magnitudes only)")
+    p.add_argument("--add-nebular",   action="store_true",
+                   help="Add nebular emission lines + continuum (requires data/qh0_grid_bc03.npz)")
+    p.add_argument("--f-ion",         type=float, default=1.0,
+                   help="Ionizing photon absorption fraction, 0–1 (default 1.0 = no escape)")
     return p.parse_args()
 
 
@@ -83,8 +88,9 @@ def main():
             "pca_results_fsps_v2.npz" if args.backend == "fsps"
             else "pca_results_bc03.npz"
         )
+    _neb_suffix = "_nebular" if args.add_nebular else ""
     output_file = Path(args.output) if args.output else (
-        PROJECT_ROOT / "data" / f"lgalaxies_sed_coeffs_{args.backend}.npz"
+        PROJECT_ROOT / "data" / f"lgalaxies_sed_coeffs_{args.backend}{_neb_suffix}.npz"
     )
 
     # ── Load PCA ─────────────────────────────────────────────────────────────
@@ -142,6 +148,20 @@ def main():
         print(f"  Dust attenuation: enabled (L-GALAXIES Mathis 1983 model)")
     elif filters and args.no_dust:
         print(f"  Dust attenuation: disabled (--no-dust)")
+
+    # ── Load nebular interpolator ────────────────────────────────────────────
+    qh0_interp = None
+    if args.add_nebular:
+        qh0_file = PROJECT_ROOT / "data" / "qh0_grid_bc03.npz"
+        if not qh0_file.exists():
+            raise FileNotFoundError(
+                f"Q(H0) grid not found: {qh0_file}\n"
+                "Run: python scripts/precompute_qh0.py"
+            )
+        from galspectra.nebular.ionizing import build_qh0_interpolator
+        from galspectra.nebular.emission import csp_nebular_sed as _csp_nebular_sed
+        qh0_interp = build_qh0_interpolator(qh0_file)
+        print(f"  Nebular emission: enabled  (f_ion = {args.f_ion:.2f})")
 
     # ── Imports ──────────────────────────────────────────────────────────────
     from galspectra.csp.builder import build_csp_coefficients
@@ -201,6 +221,20 @@ def main():
                 norm_coeffs, pca_components, pca_mean, norm_meta)
             sed_intrinsic = sed_per_msun * total_mass / _FOUR_PI_10PC_SQ
 
+            # ── Nebular emission ──────────────────────────────────────────────
+            sed_neb_disk   = np.zeros(len(pca_wave))
+            sed_neb_bulge  = np.zeros(len(pca_wave))
+            if qh0_interp is not None:
+                _neb_d, _ = _csp_nebular_sed(
+                    pca_wave, ages, sfh["logzsol_disk"],  sfh["disk_mass"],
+                    qh0_interp, f_ion=args.f_ion)
+                _neb_b, _ = _csp_nebular_sed(
+                    pca_wave, ages, sfh["logzsol_bulge"], sfh["bulge_mass"],
+                    qh0_interp, f_ion=args.f_ion)
+                sed_neb_disk  = _neb_d / _FOUR_PI_10PC_SQ
+                sed_neb_bulge = _neb_b / _FOUR_PI_10PC_SQ
+                sed_intrinsic = sed_intrinsic + sed_neb_disk + sed_neb_bulge
+
             mags = compute_ab_magnitudes(pca_wave, sed_intrinsic, filters)
             for name, m in mags.items():
                 all_synth_mags[name][i] = m
@@ -235,10 +269,15 @@ def main():
                 sed_bulge_old   = _reconstruct_absolute(bc_old,   bulge_old_mass,
                                                          pca_components, pca_mean, norm_meta)
 
+                # Nebular emission is physically co-located with young stellar
+                # regions, so it receives the same dust treatment: birth-cloud
+                # + ISM for disk, fixed 0.5 factor for bulge.
                 sed_dust = apply_dust_to_seds(
                     pca_wave,
-                    sed_disk_old, sed_disk_young,
-                    sed_bulge_old, sed_bulge_young,
+                    sed_disk_old,
+                    sed_disk_young  + sed_neb_disk,
+                    sed_bulge_old,
+                    sed_bulge_young + sed_neb_bulge,
                     float(G[i]["ColdGas"]),
                     float(G[i]["ColdGasRadius"]),
                     G[i]["MetalsColdGas"],
@@ -266,6 +305,8 @@ def main():
         "pca_file":     np.array(str(pca_file)),
         "n_components": np.array(N_pc),
         "failed_ids":   np.array(failed_ids, dtype=np.int32),
+        "add_nebular":  np.array(args.add_nebular),
+        "f_ion":        np.array(args.f_ion),
     }
     for name, arr in all_synth_mags.items():
         save_dict[f"synth_mag_{name}"] = arr

@@ -12,6 +12,13 @@ dependencies = [
     "matplotlib",
 ]
 
+[project.optional-dependencies]
+# Web app (app/). Install with:  pip install -e ".[webapp]"
+webapp = [
+    "streamlit",
+    "pandas",
+]
+
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"

@@ -23,6 +23,12 @@ The workflow has four stages:
 
 An FSPS backend is also available (`scripts/generate_seds.py`) for generating SSPs without the BC03 files.
 
+### In-code L-GALAXIES integration
+
+The PCA basis can also be handed to L-GALAXIES itself: `scripts/export_pca_for_lgalaxies.py` writes the PCA(age, Z) coefficient grid as a C-readable binary, and L-GALAXIES (built with `COMP_PCA_COEFFICIENTS`) fills a 50-element `pca_coeffs` output field **in-code at snapshot-output time** by convolving each galaxy's stored SFH with that grid — the same code path as its post-processed magnitudes. `scripts/verify_pca_onthefly.py` confirms these match the Python post-processing (Pearson r = 1.000000).
+
+This is a compact spectral **representation** computed at output time, **not** a live/wavelength-resolved SED carried as a state variable during the run. See [`documents/onthefly_factcheck.md`](documents/onthefly_factcheck.md) for the full analysis and the standard terminology.
+
 ---
 
 ## Requirements
@@ -150,6 +156,31 @@ Optional flags:
 ### Step 4 — Validate
 
 Open `notebooks/validate_lgalaxies.ipynb` in Jupyter. The notebook compares synthetic photometry against L-GALAXIES stored `Mag` and `MagDust` fields across all five SDSS bands.
+
+---
+
+## Web app
+
+An interactive Streamlit app (`app/`) lets anyone explore the outputs — rebuild
+galaxy spectra from their PCA components, compare the reconstructed photometry
+against L-GALAXIES, and see the full validation — with a home page that explains
+how galaxy spectra are produced and why PCA is useful.
+
+The app is **self-contained**: it reads only a small precomputed bundle in
+`data/`, never the external L-GALAXIES tree. Build the bundle once (on a machine
+that has the L-GALAXIES data), then launch:
+
+```bash
+pip install -e ".[webapp]"              # streamlit + pandas
+python scripts/build_webapp_bundle.py   # writes data/webapp_bundle_MilI.npz, archetypes, filters
+streamlit run app/Home.py
+```
+
+Pages: **Visualise SEDs** (components slider → live spectrum reconstruction,
+dust/nebular/direct-SPS overlays, SFH), **PCA On-The-Fly** (band-by-band
+photometry comparison + single-galaxy SED explorer), and **Validate Galaxies**
+(distributions, 1:1 checks, colours, and a quantitative summary). Currently
+Millennium-I; Millennium-II is on the roadmap.
 
 ---
 
