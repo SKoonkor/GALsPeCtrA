@@ -1,44 +1,26 @@
 """Snapshot ↔ redshift mapping for the Millennium runs.
 
-Why one snapshot has *two* redshifts
-------------------------------------
-The merger trees are the original Millennium ones, rescaled to a new cosmology. The
-scale factors L-GALAXIES evolves the galaxies on come from ``FileWithZList`` in the
-parameter file — ``input/zlists/zlist_planck_MR.txt`` for the current run. That is the
-redshift a galaxy in a given snapshot actually sits at, and it is the one
-``code/post_process_spec_mags.c:417`` uses for the ``n_H ∝ (1+z)^-1`` correction.
-(``model_dust.c`` carries the same line, but it sits inside ``#ifndef POST_PROCESS_MAGS``
-and is not compiled in this build.)
+Each snapshot has two redshifts. The merger trees are rescaled to a new
+cosmology; ``z_planck`` (``input/zlists/zlist_planck_MR.txt``) is where a
+galaxy actually sits — use it for dust, distances, cosmological age, and the
+``n_H ∝ (1+z)^-1`` correction (``code/post_process_spec_mags.c:417``). But
+``SpecPhotTables/PhotTables/`` has only ``WMAP7_*`` files — no Planck-rescaled
+tables exist — so ``ObsMag`` in the output is k-corrected on the **WMAP7**
+grid (``z_phot``), lower than Planck by 0.12–0.26 in z. Redshifting a
+synthetic spectrum with ``z_planck`` and comparing it to ``ObsMag`` produces
+tenth-of-a-magnitude colour residuals that look like a broken k-correction
+(``scripts/validate_redshifting.py`` fits an effective redshift for exactly
+this reason, matching ``zlist_wmap7_MR.txt`` to better than 0.02).
 
-The *photometric* tables are a different matter. ``PhotPrefix`` in the parameter file is
-``WMAP7``, and ``SpecPhotTables/PhotTables/`` contains only ``WMAP7_*`` files — there are
-no Planck-rescaled tables in this repository. Those tables are tabulated per snapshot and
-carry the observer-frame k-correction baked in, so ``ObsMag`` in the output is redshifted
-on the **WMAP7** snapshot grid, which is lower than the Planck one by 0.12 to 0.26 in z.
+``z_phot``: only to redshift a spectrum being compared against ``ObsMag``.
+``z_planck``: everything else.
 
-That is not a rounding difference. At snapshot 19 the two grids differ by Δz = 0.26; using
-the Planck value to redshift a synthetic spectrum and comparing it to ``ObsMag`` produces
-colour residuals of a tenth of a magnitude that look like a broken k-correction. It is
-also why ``scripts/validate_redshifting.py`` has to *fit* an effective redshift: its five
-fitted values reproduce ``zlist_wmap7_MR.txt`` to better than 0.02.
-
-So each :class:`Snapshot` carries both, named for what they are for:
-
-``z_planck``
-    where the galaxy is. Use for dust, distances, cosmological age, and any statement
-    about the physical epoch.
-``z_phot``
-    the grid L-GALAXIES' own photometry was computed on. Use *only* to redshift a
-    synthetic spectrum that is about to be compared against ``ObsMag``.
-
-Do not "fix" this by setting them equal. The asymmetry is in the C code, and collapsing it
-here would hide it rather than remove it. The fix is Planck-rescaled photometric tables,
-which would make ``z_phot`` equal to ``z_planck`` on its own.
-
-``z_phot`` is clamped at zero. Snapshot 58 — the z = 0 output — sits at WMAP7 z = −0.165,
-because the rescaling maps the same expansion factors onto a different cosmology; the
-tables extrapolate into it but a spectrum cannot be blueshifted by
-``photometry.redshift.observed_frame``, which rejects z < 0.
+**Do not "fix" this by setting them equal** — the asymmetry is in the C code;
+collapsing it here hides rather than removes it. The real fix is
+Planck-rescaled photometric tables. ``z_phot`` is clamped at zero (snapshot
+58, z=0, sits at WMAP7 z=−0.165 from the cosmology rescaling; a spectrum
+can't be blueshifted by ``photometry.redshift.observed_frame``, which rejects
+z < 0).
 """
 
 from __future__ import annotations
@@ -56,10 +38,9 @@ __all__ = [
     "discover_tags",
 ]
 
-#: ``FileWithZList`` values from the parameter files, relative to the L-GALAXIES root.
-#: ``"planck"`` is the run's own list; ``"wmap7"`` is the one the ``WMAP7_*`` photometric
-#: tables were built against. Both store the scale factor ``a``, not redshift — the
-#: conversion at ``code/init.c:284`` is ``z = 1/a - 1``.
+#: FileWithZList values, relative to the L-GALAXIES root. "planck" is the run's
+#: own list; "wmap7" is what the WMAP7_* photometric tables were built against.
+#: Both store scale factor a, not z (code/init.c:284: z = 1/a - 1).
 ZLISTS: dict[str, str] = {
     "planck": "input/zlists/zlist_planck_MR.txt",
     "wmap7": "input/zlists/zlist_wmap7_MR.txt",
@@ -70,11 +51,9 @@ ZLISTS: dict[str, str] = {
 class Snapshot:
     """One L-GALAXIES output snapshot.
 
-    ``tag`` is the two-decimal redshift token that appears in the output filenames.
-    ``code/save.c:68`` builds them with ``%1.2f`` of the *snapshot's* redshift, not of the
-    redshift that was requested in ``desired_output_redshifts.txt`` — asking for z = 2.5
-    yields a file tagged ``z2.44``. The tag is therefore derived from ``z_planck`` here
-    rather than stored, so the two cannot disagree.
+    ``tag`` is the two-decimal token in output filenames (``code/save.c:68``,
+    ``%1.2f`` of the snapshot's actual redshift, not the requested one — z=2.5
+    can yield ``z2.44``). Derived from z_planck, not stored, so they can't disagree.
     """
 
     snap: int
@@ -91,11 +70,10 @@ class Snapshot:
 
 
 def redshift_table(lgal_root, cosmology="planck") -> list[float]:
-    """Redshift per snapshot index, read from the zlist rather than transcribed.
+    """Redshift per snapshot index, read from the zlist (not transcribed).
 
-    Returns a list indexed by snapshot number. Entries can be negative: the Planck list
-    runs to z = −0.10 at snapshot 63 and the WMAP7 list turns negative at snapshot 56,
-    both being the rescaled "future" of the box.
+    Can be negative: Planck runs to z=−0.10 at snapshot 63, WMAP7 turns
+    negative at snapshot 56 — both the rescaled "future" of the box.
     """
     if cosmology not in ZLISTS:
         raise ValueError(
@@ -127,13 +105,9 @@ def snapshot(lgal_root, snap) -> Snapshot:
 def snapshots(lgal_root, tags=None, snaps=None) -> list[Snapshot]:
     """Snapshot records, selected by filename tag or by snapshot index.
 
-    Exactly one of ``tags`` or ``snaps`` must be given. Selecting by tag is the useful
-    direction in practice — a tag is what you have when you are holding a sample file —
-    and it raises rather than guessing if a tag matches no snapshot, which is what a
-    typo'd or stale filename looks like.
-
-    Only non-negative-redshift snapshots are considered when matching a tag, so the
-    "future" snapshots cannot capture ``z0.00``.
+    Exactly one of tags/snaps required. Selecting by tag raises rather than
+    guessing on no match. Only non-negative-redshift snapshots are matched
+    (so a "future" snapshot can't capture z0.00).
     """
     if (tags is None) == (snaps is None):
         raise ValueError("pass exactly one of tags= or snaps=")
@@ -157,12 +131,10 @@ def snapshots(lgal_root, tags=None, snaps=None) -> list[Snapshot]:
 
 
 def discover_tags(tree, lgal_root) -> list[str]:
-    """Redshift tags for which a processed sample exists on disk, low z first.
+    """Redshift tags with a processed sample on disk, low z first.
 
-    Reads the directory rather than a hard-coded list, so it stays true after a run with a
-    different ``desired_output_redshifts.txt``. Returns tags, not paths: the caller turns
-    one into a path with ``tree.sample_path(lgal_root, tag)``, which keeps the naming
-    convention in the registry.
+    Reads the directory (not a hard-coded list). Returns tags, not paths —
+    the caller builds a path with tree.sample_path(lgal_root, tag).
     """
     directory = Path(lgal_root) / "output" / "samples"
     if not directory.is_dir():
