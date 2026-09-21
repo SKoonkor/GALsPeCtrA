@@ -1,36 +1,15 @@
 """
 Diagonal weighting schemes for the spectral PCA.
 
-The architectural constraint
-----------------------------
-Reconstruction must stay *linear in flux*, because a composite stellar population is
-built as the mass-weighted sum of simple populations:
+Weights must be a fixed function of wavelength only — never per-spectrum — or
+reconstruction stops being linear in flux and a composite population is no
+longer the mass-weighted sum of its SSPs. The failure is silent (each SSP
+still reconstructs fine; only galaxies come out wrong), so `build_weights`
+enforces (N_wave,) shape and refuses the per-spectrum schemes `pca/preprocess.py`
+still offers, by name.
 
-    L_gal(λ) = Σ_i m_i · S(λ; age_i, Z_i)
-
-If the SSP spectra are transformed by anything that depends on the individual
-spectrum — an L2 norm, a value at a reference wavelength, a logarithm — that identity
-no longer holds, and the failure is silent: each SSP still reconstructs beautifully,
-and only the *galaxies* come out wrong. That is the hardest class of bug to find,
-because every unit-level check passes.
-
-A weight that is a fixed function of wavelength alone is safe. It rescales the
-columns of the design matrix, changing which wavelengths the PCA works hardest to
-reproduce, and it is divided back out of the basis vectors afterwards
-(`basis.SpectralBasis.fit`), so the stored basis lives in flux units and the
-composition identity survives exactly.
-
-So: **weights are (N_wave,), never (N_ssp,) and never (N_ssp, 1).** Every function
-here enforces that shape, and `build_weights` refuses the two per-spectrum schemes
-that `pca/preprocess.py` still offers, by name, with an explanation.
-
-Relation to the existing code
------------------------------
-`preprocess.normalize_seds(method="std")` divides each wavelength bin by its standard
-deviation across the SSP grid. That *is* a diagonal weighting — it was simply never
-described as one. It appears here as `inverse_std`, and reproduces the committed
-basis exactly. `uniform` is the natural null hypothesis it should be compared against,
-which has never been done.
+`inverse_std` reproduces `preprocess.normalize_seds(method="std")` — the
+committed basis's weighting — described here as what it structurally is.
 """
 
 from __future__ import annotations
@@ -69,11 +48,10 @@ _EPS = 1e-300  # only guards true zeros; never large enough to bias a real weigh
 
 
 def check_weights(w, n_wave):
-    """Validate a weight vector. Returns it as a contiguous float64 array.
+    """Validate a weight vector; returns it as contiguous float64.
 
-    The shape check is the load-bearing one: it makes a per-spectrum weight — the
-    thing that breaks the architecture — a structural impossibility rather than a
-    convention someone has to remember.
+    The shape check makes a per-spectrum weight structurally impossible rather
+    than a convention to remember.
     """
     w = np.ascontiguousarray(np.asarray(w, dtype=float))
     if w.ndim != 1:
@@ -115,35 +93,15 @@ def _piecewise_factors(wave, regions):
 def build_weights(scheme, X, wave, base="uniform", regions=None, normalise=True):
     """Construct a diagonal weight vector over wavelength.
 
-    Parameters
-    ----------
-    scheme : str — one of SCHEMES.
-        'uniform'      w = 1. The null hypothesis: fit absolute flux errors.
-        'inverse_std'  w = 1/std_over_SSPs. The incumbent (preprocess method='std').
-                       Equalises how much each bin *varies* across the library, so
-                       the PCA spends components where the library disagrees with
-                       itself rather than where it is bright.
-        'inverse_rms'  w = 1/sqrt(mean(X²)). Equalises *amplitude*, so a fixed
-                       fractional error costs the same everywhere. This is the
-                       scheme that should help the faint blue continuum of red
-                       galaxies, which is where the measured bias lives.
-        'inverse_mean' w = 1/mean(X). As inverse_rms but using the mean; kept
-                       because it is what a reader assumes 'fractional' means.
-        'piecewise'    a `base` scheme multiplied by per-region factors, to buy
-                       accuracy in a named wavelength range at a stated cost
-                       elsewhere.
-    X : (N_ssp, N_wave) — the SSP library the weights are derived from.
-    wave : (N_wave,) — wavelengths in Å, needed by 'piecewise'.
-    base : str — base scheme for 'piecewise'.
-    regions : list of {'min','max','factor'} — required for 'piecewise'.
-    normalise : bool — rescale so the geometric mean weight is 1. This is cosmetic;
-        an overall scalar on w cancels exactly in fit → reconstruct, but it keeps
-        the reported weight curves comparable between schemes.
+    scheme : 'uniform' (w=1), 'inverse_std' (w=1/std, the incumbent),
+        'inverse_rms' (w=1/rms), 'inverse_mean' (w=1/mean), or 'piecewise'
+        (a `base` scheme times per-region factors from `regions`).
+    X : (N_ssp, N_wave) SSP library the weights are derived from.
+    wave : (N_wave,) Å, needed by 'piecewise'.
+    normalise : rescale so the geometric mean weight is 1 (cosmetic — an
+        overall scalar on w cancels exactly in fit -> reconstruct).
 
-    Returns
-    -------
-    w : (N_wave,) float64
-    meta : dict — provenance for the basis file
+    Returns (w, meta): w is (N_wave,) float64; meta is provenance for the basis file.
     """
     if scheme in REFUSED_SCHEMES:
         raise ValueError(
@@ -181,8 +139,7 @@ def build_weights(scheme, X, wave, base="uniform", regions=None, normalise=True)
         meta["regions"] = list(regions)
 
     if not np.all(np.isfinite(w)) or np.any(w <= 0):
-        # A dead wavelength bin (identically zero across the whole library) is a
-        # property of the range, not of the weighting. Say so precisely.
+        # a dead bin (zero across the library) is a range problem, not a weighting one
         bad = ~np.isfinite(w) | (w <= 0)
         raise ValueError(
             f"{int(bad.sum())} wavelength bins gave a non-positive or non-finite "
