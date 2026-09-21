@@ -36,19 +36,7 @@ EXTRA_FILTER_FILES = {
 
 
 def load_filter(filter_path):
-    """
-    Load a filter transmission curve.
-
-    Parameters
-    ----------
-    filter_path : str or Path
-        Full path to the filter file.
-
-    Returns
-    -------
-    wave : (N,) array — wavelength in Å
-    trans : (N,) array — transmission (0–1)
-    """
+    """Load a filter transmission curve. Returns (wave_AA, transmission)."""
     filter_path = Path(filter_path)
     if not filter_path.exists():
         raise FileNotFoundError(f"Filter file not found: {filter_path}")
@@ -56,12 +44,10 @@ def load_filter(filter_path):
     with open(filter_path) as f:
         first_line = f.readline().strip()
         try:
-            n_points = int(first_line)
-            # First line is a count; data follows
+            n_points = int(first_line)  # count header; data follows
             data = np.loadtxt(f)
         except ValueError:
-            # First line is already data (no count header)
-            row0 = np.fromstring(first_line, sep=' ')
+            row0 = np.fromstring(first_line, sep=' ')  # no count header, already data
             rest = np.loadtxt(f)
             data = np.vstack([row0, rest])
 
@@ -76,17 +62,7 @@ def load_filter(filter_path):
 
 
 def load_sdss_filters(filter_dir):
-    """
-    Load all 5 SDSS ugriz filter curves from a given directory.
-
-    Parameters
-    ----------
-    filter_dir : str or Path
-
-    Returns
-    -------
-    filters : dict {band_name: (wave_Ang, transmission)}
-    """
+    """Load all 5 SDSS ugriz filter curves. Returns {band: (wave_AA, trans)}."""
     filter_dir = Path(filter_dir)
     filters = {}
     for name, fname in SDSS_FILTER_FILES.items():
@@ -96,17 +72,9 @@ def load_sdss_filters(filter_dir):
 
 
 def load_filters(filter_dir, names):
-    """
-    Load an arbitrary set of filters by name.
+    """Load filters by name (keys from SDSS_FILTER_FILES or EXTRA_FILTER_FILES).
 
-    Parameters
-    ----------
-    filter_dir : str or Path
-    names : list of str — keys from SDSS_FILTER_FILES or EXTRA_FILTER_FILES
-
-    Returns
-    -------
-    filters : dict {name: (wave_Ang, transmission)}
+    Returns {name: (wave_AA, transmission)}.
     """
     all_files = {**SDSS_FILTER_FILES, **EXTRA_FILTER_FILES}
     filter_dir = Path(filter_dir)

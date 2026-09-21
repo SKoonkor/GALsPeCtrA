@@ -1,21 +1,14 @@
 """
 Canonical filter-curve loader and the named filter sets used across the project.
 
-There are three transmission-curve file conventions in this project and two
-wavelength units, and getting either wrong produces magnitudes that look reasonable
-and are wrong by tenths of a magnitude. This module is the single place that knows:
+Three header conventions ('#'-commented — PAUS/SVO; bare integer row-count —
+L-GALAXIES; none) and two wavelength units (**PAUS is nm, everything else Å**)
+— getting either wrong is a wrong-by-tenths-of-a-mag bug that looks fine.
+This module is the single parser; `scripts/wavelength_requirements.py` reuses
+`load_curve` rather than keeping its own copy.
 
-  * '#'-commented headers            — PAUS, SVO
-  * a bare integer row-count header  — L-GALAXIES SpecPhotTables/Filters
-  * no header at all
-  * **PAUS curves are in nanometres.** Every other curve in the project is Å.
-
-`scripts/wavelength_requirements.py` imports `load_curve` from here rather than
-keeping its own copy, so a fix to the parser reaches both.
-
-The PAUS narrow-band throughputs are the official *total* throughput — filter ×
-atmosphere at airmass 1.0 × WHT optics × Hamamatsu CCD QE — not the bare filter
-transmission, so no further correction should be applied to them.
+PAUS narrow-band throughputs are the official *total* throughput (filter ×
+atmosphere × optics × CCD QE) — do not apply further correction to them.
 """
 
 from __future__ import annotations
@@ -46,13 +39,10 @@ _LGAL_FILTER_DIR = (
 
 
 def load_curve(path, unit="AA"):
-    """Read a two-column transmission curve.
+    """Read a two-column transmission curve; returns (wave_AA, transmission).
 
-    Returns (wave_angstrom, transmission) with wavelength ascending. Transmission is
-    returned as written in the file — it is **not** renormalised to a peak of 1,
-    because the PAUS curves are absolute throughputs and rescaling them would be
-    wrong. The AB magnitude is invariant to an overall scaling of T anyway, since it
-    appears in both the numerator and the denominator.
+    Not renormalised to peak 1 — PAUS curves are absolute throughputs, and AB
+    magnitude is invariant to an overall scaling of T anyway.
     """
     path = Path(path)
     if not path.exists():
@@ -142,14 +132,10 @@ FILTER_SET_LOADERS = {
 
 
 def load_filter_set(*names, prefix=False):
-    """Load one or more named sets into a single {band: (wave_AA, trans)} dict.
+    """Load named sets into one {band: (wave_AA, trans)} dict.
 
-    Parameters
-    ----------
-    *names : keys of FILTER_SET_LOADERS
-    prefix : bool — prepend '<set>:' to every band name, to keep sets separable when
-        several are loaded at once. Band names are already unique across the current
-        sets, so this is off by default.
+    prefix : prepend '<set>:' to band names (off by default; names are
+        already unique across the current sets).
     """
     out = {}
     for name in names:
