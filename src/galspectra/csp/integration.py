@@ -1,18 +1,11 @@
 import numpy as np
 
 def compute_mass_bins(t_sfh, sfr, age_edges):
-    """
-    Integrate SFH into SSP age bins.
+    """Integrate SFH into SSP age bins.
 
-    Parameters
-    ----------
-    t_sfh : (Nt, )
-    sfr   : (Nt, )
-    age_edges : (Na+1, ) SSP age bin edges
-
-    Returns
-    -------
-    mass : (Na, )
+    t_sfh, sfr : (Nt,)
+    age_edges : (Na+1,) SSP age bin edges
+    Returns mass : (Na,)
     """
 
     t_sfh = np.asarray(t_sfh)

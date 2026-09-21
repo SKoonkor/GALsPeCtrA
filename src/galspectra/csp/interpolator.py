@@ -5,11 +5,9 @@ class PCACoefficientInterpolator:
 
     def __init__(self, ages, metallicities, coeff_grid):
         """
-        Params
-        ------
-        ages: (N_ages,) linear
-        metallicities: (N_Z,) logZ or Z (need to check with the input)
-        coeff_grid: (N_age, N_Z, N_pc)
+        ages : (N_ages,) linear
+        metallicities : (N_Z,) logZ or Z (unverified against caller)
+        coeff_grid : (N_age, N_Z, N_pc)
         """
 
         self.ages = ages
@@ -30,18 +28,7 @@ class PCACoefficientInterpolator:
             self.interps.append(interp)
 
     def get_coeffs(self, age, Z):
-        """
-
-        Params
-        ------
-        age: scalar
-        Z: scalar
-
-        Returns
-        -------
-        coeffs: (N_pc,)
-
-        """
+        """age, Z : scalar. Returns coeffs : (N_pc,)."""
 
         point = np.array([[age, Z]])
 

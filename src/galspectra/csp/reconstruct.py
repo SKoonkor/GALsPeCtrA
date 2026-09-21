@@ -6,20 +6,11 @@ def reconstruction_sed_from_pca(
         mean,
         norm_meta=None,
         ):
-    """
-    Reconstrcut SED from PCA coefficients.
+    """Reconstruct SED from PCA coefficients.
 
-    Parameters
-    ----------
-    coeffs : (N_pc,)
-    components : (N_pc, N_wave)
-    mean : (N_wave,)
-    norm_meta : dict (optional)
-        Needed to denormalise 
-
-    Returns
-    -------
-    sed : (N_wave,)
+    coeffs : (N_pc,), components : (N_pc, N_wave), mean : (N_wave,)
+    norm_meta : dict, optional — needed to denormalise
+    Returns sed : (N_wave,)
     """
 
     sed_norm = mean + coeffs @ components
