@@ -1,46 +1,17 @@
 """
 Flux-conserving resampling onto a logarithmic wavelength grid.
 
-Why this module exists
-----------------------
-The BC03 SSP library is delivered on a *piecewise* wavelength grid: 10 Å in the UV,
-20 Å across the optical, 50 Å and then 100 Å in the near-infrared. A PCA fitted on
-that grid weights each wavelength bin equally, so the optical — which happens to be
-finely sampled — dominates the variance purely because it contributes more columns.
-A grid of constant resolving power R = λ/Δλ removes that accident: every decade of
-wavelength contributes the same number of columns.
+BC03's native grid is piecewise (10 Å in the UV, 100 Å in the IR), so a PCA
+fit on it implicitly overweights the finely-sampled optical. A constant-R
+grid fixes that. Resampling must stay linear in flux with no per-spectrum
+term (f_out = M @ f_in, M fixed) — `resampling_matrix` returns exactly that
+matrix, built once and reused for every spectrum. Unlike `np.interp`, it is
+also flux-conserving: passband integrals of the resampled spectrum match the
+original, which matters since every metric here is a passband integral.
 
-The linearity requirement
--------------------------
-The whole GALsPeCtrA architecture rests on reconstruction being *linear in flux*, so
-that a composite population is the mass-weighted sum of its simple populations. Any
-resampling therefore has to be a linear operator with no per-spectrum term:
-
-    f_out = M @ f_in          M fixed, independent of f_in
-
-`resampling_matrix()` returns exactly that matrix. It is built once and applied to
-every spectrum, so it cannot introduce a per-spectrum normalisation by accident.
-Note that `np.interp` is *also* linear in this sense, but it is not flux-conserving:
-integrating an interpolated spectrum over a passband does not give the same answer as
-integrating the original. Since every metric in this project is a passband integral,
-that difference matters, and this module integrates exactly instead.
-
-Method
-------
-The input is treated as piecewise linear in λ between its samples — the same
-assumption `np.trapezoid` makes, and the same one the synthetic photometry makes.
-Each output bin holds the exact mean of that piecewise-linear function over the bin:
-
-    f_out[j] = (1 / (e[j+1] - e[j])) * ∫_{e[j]}^{e[j+1]} f(λ) dλ
-
-Because the integral of a piecewise-linear function is a linear functional of the node
-values, this is a matrix. It is assembled from a cumulative-integral operator T, where
-row k of T maps node values to ∫ from λ_0 to an arbitrary point.
-
-A consequence worth stating: this operation cannot create information. Requesting a
-resolution finer than the input grid produces a smooth interpolation of the input, not
-extra spectral structure. `resolution_report()` exists to make that visible rather than
-letting a config file quietly imply a resolution the library does not have.
+Each output bin is the exact mean of the (piecewise-linear) input over that
+bin. Oversampling relative to the input's native resolution does not create
+information; `resolution_report` makes that visible.
 """
 
 from __future__ import annotations
@@ -57,23 +28,13 @@ __all__ = [
 
 
 def log_wavelength_grid(wave_min, wave_max, resolution):
-    """Bin centres and edges of a grid with constant resolving power.
+    """Bin centres/edges of a constant-resolving-power grid.
 
-    Parameters
-    ----------
-    wave_min, wave_max : float
-        Range to cover, in Å. Both are bin *edges*, so the returned centres lie
-        strictly inside.
-    resolution : float
-        R = λ/Δλ. Bin edges are geometrically spaced with ratio exp(1/R).
+    wave_min, wave_max : range to cover, in Å (bin edges).
+    resolution : R = λ/Δλ; edges are geometrically spaced with ratio exp(1/R).
 
-    Returns
-    -------
-    centres : (N,) float64 — geometric bin centres, sqrt(e_j * e_{j+1})
-    edges   : (N+1,) float64
-
-    The number of bins is ceil(R * ln(λmax/λmin)), so the actual resolution is
-    marginally higher than requested and the range is covered exactly.
+    Returns (centres, edges). n_bins = ceil(R * ln(wave_max/wave_min)), so
+    actual resolution is marginally higher than requested.
     """
     wave_min = float(wave_min)
     wave_max = float(wave_max)
@@ -88,8 +49,7 @@ def log_wavelength_grid(wave_min, wave_max, resolution):
             f"R={resolution:g} over {wave_min:g}-{wave_max:g} Å gives {n_bins} bins"
         )
 
-    # Spread the (sub-bin) rounding excess over the whole range rather than
-    # letting the last bin overhang wave_max.
+    # spread rounding excess over the range rather than overhang wave_max
     edges = wave_min * np.exp(np.linspace(0.0, np.log(wave_max / wave_min), n_bins + 1))
     centres = np.sqrt(edges[:-1] * edges[1:])
     return centres, edges
@@ -98,15 +58,9 @@ def log_wavelength_grid(wave_min, wave_max, resolution):
 def cumulative_integral_matrix(wave_in, points):
     """Rows mapping node values to ∫ from wave_in[0] to each point.
 
-    Returns
-    -------
-    T : (len(points), len(wave_in)) float64
-        T @ f  ==  [∫_{λ0}^{p} f(λ) dλ  for p in points], for f piecewise linear
-        on `wave_in`.
-
-    Points outside [wave_in[0], wave_in[-1]] are clamped to the ends, i.e. the
-    function is treated as zero beyond the library range. Callers should not rely
-    on that: `resampling_matrix` rejects out-of-range output grids outright.
+    T @ f == cumulative integral of f (piecewise-linear on wave_in) at each
+    point. Points outside the input range are clamped to the ends;
+    `resampling_matrix` rejects out-of-range output grids outright.
     """
     wave_in = np.asarray(wave_in, dtype=float)
     points = np.atleast_1d(np.asarray(points, dtype=float))
@@ -117,11 +71,9 @@ def cumulative_integral_matrix(wave_in, points):
     if not np.all(np.diff(wave_in) > 0):
         raise ValueError("wave_in must be strictly increasing")
 
-    dlam = np.diff(wave_in)                       # (n_in-1,)
+    dlam = np.diff(wave_in)
 
-    # Node-to-node trapezoid contributions, as a matrix:
-    #   ∫_{λ_k}^{λ_{k+1}} f dλ = dlam[k] * (f_k + f_{k+1}) / 2
-    # Cumulative sum of those gives C[k] = ∫_{λ_0}^{λ_k} f dλ.
+    # trapezoid contribution per segment, cumulative-summed -> C[k] = ∫_λ0^λk f dλ
     seg = np.zeros((n_in - 1, n_in))
     idx = np.arange(n_in - 1)
     seg[idx, idx] = dlam / 2.0
@@ -130,14 +82,12 @@ def cumulative_integral_matrix(wave_in, points):
     cum_nodes[1:] = np.cumsum(seg, axis=0)        # (n_in, n_in)
 
     p = np.clip(points, wave_in[0], wave_in[-1])
-    # Bracketing interval [k, k+1] for each point.
-    k = np.clip(np.searchsorted(wave_in, p, side="right") - 1, 0, n_in - 2)
-    t = (p - wave_in[k]) / dlam[k]                # 0 at the left node, 1 at the right
+    k = np.clip(np.searchsorted(wave_in, p, side="right") - 1, 0, n_in - 2)  # bracketing interval
+    t = (p - wave_in[k]) / dlam[k]                # 0 at left node, 1 at right
 
-    T = cum_nodes[k].copy()                       # (n_points, n_in)
+    T = cum_nodes[k].copy()
 
-    # Partial interval: ∫_{λ_k}^{p} f dλ with f linear
-    #   = (p - λ_k)/2 * ((2 - t) f_k + t f_{k+1})
+    # partial-interval integral for linear f: (p-λ_k)/2 * ((2-t)f_k + t f_{k+1})
     half_span = (p - wave_in[k]) / 2.0
     rows = np.arange(p.size)
     T[rows, k] += half_span * (2.0 - t)
@@ -146,25 +96,14 @@ def cumulative_integral_matrix(wave_in, points):
 
 
 def resampling_matrix(wave_in, edges_out, tol=1e-9):
-    """Flux-conserving resampling operator onto the bins defined by `edges_out`.
+    """Flux-conserving resampling operator: f_out = M @ f_in.
 
-    Parameters
-    ----------
-    wave_in : (N_in,) — input sample wavelengths, strictly increasing, Å
-    edges_out : (N_out+1,) — output bin edges, strictly increasing, Å
-    tol : float — relative slack allowed when checking that the output grid lies
-        inside the input range, to absorb float round-off in grid construction.
+    wave_in : (N_in,) input wavelengths, strictly increasing, Å
+    edges_out : (N_out+1,) output bin edges, strictly increasing, Å
+    tol : relative slack when checking the output grid lies inside the input range
 
-    Returns
-    -------
-    M : (N_out, N_in) float64 — f_out = M @ f_in, with f_out[j] the mean of the
-        piecewise-linear input over bin j.
-
-    Raises
-    ------
-    ValueError if the output grid extends beyond the input range. Extrapolating a
-    stellar library past its own wavelength coverage is never the right answer, and
-    silently returning zeros there would put a fake absorption trough in the basis.
+    f_out[j] is the mean of the piecewise-linear input over output bin j.
+    Raises if edges_out extends beyond wave_in — never extrapolate the library.
     """
     wave_in = np.asarray(wave_in, dtype=float)
     edges_out = np.asarray(edges_out, dtype=float)
@@ -187,12 +126,7 @@ def resampling_matrix(wave_in, edges_out, tol=1e-9):
 
 
 def native_resolution(wave):
-    """Per-sample resolving power λ/Δλ of an arbitrary grid.
-
-    Δλ is the local sample spacing (the mean of the two neighbouring gaps, and the
-    single gap at the ends), so the answer is symmetric and does not jump at the
-    boundaries between the BC03 grid's constant-Δλ blocks.
-    """
+    """Per-sample resolving power λ/Δλ (Δλ = mean of neighbouring gaps)."""
     wave = np.asarray(wave, dtype=float)
     dlam = np.empty_like(wave)
     gaps = np.diff(wave)
@@ -203,16 +137,11 @@ def native_resolution(wave):
 
 
 def resolution_report(wave_in, resolution, wave_min=None, wave_max=None):
-    """Compare a requested resolving power against what the input grid supplies.
+    """Compare a requested resolving power to the input grid's native one.
 
-    Returns a dict with the fraction of the requested range where the request
-    exceeds the native resolution — i.e. where resampling interpolates rather than
-    measures — and the worst-case oversampling factor.
-
-    This is reported, not enforced. Oversampling is legitimate (it makes the PCA's
-    implicit metric uniform, and passbands wider than the native sampling are
-    unaffected); what is not legitimate is claiming spectral detail the library does
-    not contain.
+    Returns the fraction of the range where the request exceeds native
+    resolution (interpolating, not measuring) and the worst oversampling factor.
+    Reported, not enforced.
     """
     wave_in = np.asarray(wave_in, dtype=float)
     lo = wave_in[0] if wave_min is None else float(wave_min)
