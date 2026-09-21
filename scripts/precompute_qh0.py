@@ -54,8 +54,7 @@ def main():
     tage_idx    = param_names.index("tage")
     logz_idx    = param_names.index("logzsol")
 
-    # Unique sorted axes
-    age_grid_gyr = np.unique(params[:, tage_idx])   # (200,) Gyr
+    age_grid_gyr = np.unique(params[:, tage_idx])   # (200,) Gyr, unique sorted
     # Use exact BC03 metallicity values (avoids floating-point key mismatches)
     from galspectra.sps.bc03_backend import BC03_METALLICITIES
     Z_grid = BC03_METALLICITIES                       # (6,) exact Python floats
