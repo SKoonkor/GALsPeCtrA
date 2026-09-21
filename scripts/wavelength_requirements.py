@@ -1,33 +1,25 @@
 """
 wavelength_requirements.py
 
-Compute the rest-frame wavelength coverage a PCA SSP basis must span in order to
-synthesise photometry for a given set of filters over a given redshift range.
+Computes the rest-frame wavelength coverage a PCA SSP basis must span to
+synthesise photometry for a filter set over a redshift range.
 
-For a filter with observed-frame response R(lambda) and a source at redshift z, the
-rest-frame wavelength sampled by observed lambda_obs is lambda_obs / (1 + z). So:
+For a filter with observed-frame response R(λ) and a source at z, the
+rest-frame wavelength sampled by λ_obs is λ_obs / (1+z):
 
-    rest-frame requirement = [ lambda_blue_edge / (1 + z_max),
-                               lambda_red_edge  / (1 + z_min) ]
+    rest-frame requirement = [λ_blue_edge / (1+z_max), λ_red_edge / (1+z_min)]
 
-The blue limit is therefore set by the bluest filter at the HIGHEST redshift, and the
-red limit by the reddest filter at the LOWEST redshift.
-
-Filter edges are taken from the real transmission curves at a threshold relative to
-each curve's peak, not from nominal specification edges. Two thresholds are reported
-(1% and 0.1% by default) so the sensitivity to that choice is visible.
+So the blue limit is set by the bluest filter at the highest z, the red
+limit by the reddest filter at the lowest z. Filter edges come from the
+real transmission curves at a threshold relative to peak (1% and 0.1% by
+default), not nominal spec edges.
 
 Usage:
-  cd /path/to/GALsPeCtrA
   python scripts/wavelength_requirements.py
   python scripts/wavelength_requirements.py --thresholds 0.01 0.001 --csv out.csv
 
-Inputs:
-  data/filters/paus/OUT_FILTERS/      40 narrow bands + 6 broad bands (nm, total throughput)
-  data/filters/svo/                   Euclid VIS/NISP, CFHT MegaCam ugriz, 2MASS Ks (Angstrom)
-
-Outputs:
-  stdout table, and optionally a CSV of per-filter edges.
+Inputs: data/filters/paus/OUT_FILTERS/ (40 narrow + 6 broad bands, nm),
+data/filters/svo/ (Euclid VIS/NISP, CFHT MegaCam ugriz, 2MASS Ks, Å).
 """
 
 import argparse
@@ -48,12 +40,8 @@ REFERENCE_BASIS = (805.0, 29950.0)
 REFERENCE_BASIS_NAME = "committed BC03 basis (data/pca_results_bc03.npz)"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Filter set definitions
-#
-# Each entry: (label, z_min, z_max, list of (band_name, path, wavelength_unit))
-# `role` distinguishes the science drivers from validation-only bands.
-# ─────────────────────────────────────────────────────────────────────────────
+# Filter set definitions: (label, z_min, z_max, list of (band_name, path, unit)).
+# `role` distinguishes science drivers from validation-only bands.
 
 def _paus_narrow_bands():
     """The 40 PAUCam narrow bands, AOD_D_<centre_nm>.dat, centres 455-845 nm."""
@@ -122,8 +110,8 @@ FILTER_SETS = [
     },
 ]
 
-# `load_curve` now lives in galspectra.photometry.filter_sets — the canonical home,
-# shared with the PCA experiment harness so a parser fix reaches both.
+# load_curve lives in galspectra.photometry.filter_sets (shared with the PCA
+# experiment harness, so a parser fix reaches both)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -199,8 +187,7 @@ def analyse(thresholds):
         for t in thresholds:
             blue_obs = min(set_edges[t]["blue"])
             red_obs = max(set_edges[t]["red"])
-            # bluest filter at the highest z sets the blue limit;
-            # reddest filter at the lowest z sets the red limit
+            # bluest filter at highest z -> blue limit; reddest at lowest z -> red limit
             per_set.append({
                 "set": fs["label"],
                 "role": fs["role"],
