@@ -1,0 +1,95 @@
+# Weighted-PCA experiment: the reference configuration.
+#
+# Resolution note (this is a real constraint, not a preference)
+# ------------------------------------------------------------
+# The BC03 FullSED library this project uses is the low-resolution (BaSeL) grid:
+# 10 Å sampling in the UV, 20 Å across 3650-9990 Å, 50 Å and then 100 Å in the
+# near-infrared. Its resolving power therefore runs from R ~ 106 at 1050 Å to
+# R ~ 500 at 9990 Å, with R ~ 275 at 5500 Å.
+#
+# No single constant-R grid matches a library whose own R varies by a factor of five.
+# R = 300 matches the optical, which is where the science is (PAUS narrow bands sit
+# at 4550-8450 Å observed) and where the measured colour bias lives. It oversamples
+# the UV by up to ~2.8x; that is smooth interpolation of a region only reached at
+# high redshift, and it is harmless for passbands far wider than the sampling. It is
+# reported by the script rather than assumed.
+#
+# configs/pca_experiments/highres_R500.yaml runs the same experiment at R = 500 —
+# the value originally proposed — so the cost of oversampling everywhere is measured
+# rather than argued about.
+
+name: bc03_R300
+
+library:
+  sed_grid: data/sed_grid_bc03.npz
+
+grid:
+  # 1048-23552 Å is the union requirement from documents/wavelength_requirements.md:
+  # CFHT MegaCam u at z = 2 sets the blue limit, 2MASS Ks at z = 0 the red one.
+  wave_min: 1048.0
+  wave_max: 23552.0
+  resolution: 300
+
+weighting:
+  # The null hypothesis. Fits absolute flux error, so the bright red optical
+  # dominates and the faint blue continuum is ignored.
+  - scheme: uniform
+    label: uniform
+
+  # The incumbent: preprocess.normalize_seds(method="std") is exactly this.
+  - scheme: inverse_std
+    label: inverse_std
+
+  # Equalises fractional error across wavelength. This is the scheme with a
+  # mechanism behind it for the red-galaxy bias: red SSPs are faint in the blue,
+  # so an absolute-error fit spends nothing there.
+  - scheme: inverse_rms
+    label: inverse_rms
+
+  # Fractional weighting with the 4000 Å break region bought up deliberately.
+  # 3600-4400 Å rest-frame is where D4000 and the g-band blue edge live.
+  - scheme: piecewise
+    label: piecewise_break
+    base: inverse_rms
+    regions:
+      - {min: 3600.0, max: 4400.0, factor: 3.0}
+
+  # Fractional weighting concentrated on the whole rest-frame range PAUS's narrow
+  # bands can reach over 0 < z < 1.
+  - scheme: piecewise
+    label: piecewise_paus
+    base: inverse_rms
+    regions:
+      - {min: 2275.0, max: 8450.0, factor: 2.0}
+
+components:
+  max: 200
+  scan: [5, 10, 15, 20, 25, 30, 40, 50, 60, 80, 100, 125, 150, 200]
+
+photometry:
+  sets: [paus_nb, megacam, euclid, 2mass_ks, lgal_sdss]
+  # A band whose response is not almost entirely inside the evaluation grid gives a
+  # magnitude that looks plausible and is wrong; reject rather than silently truncate.
+  min_coverage: 0.99
+
+d4000:
+  definitions: [D4000_n, D4000_w]
+  # The 4000 Å break falls inside the PAUS narrow-band set for roughly 0.14 < z < 1.11.
+  narrowband_redshifts: [0.2, 0.4, 0.6, 0.8, 1.0]
+
+galaxies:
+  sample: ../L-GALAXIES/LGalaxies2020_PublicRepository-master/output/samples/Planck_Mil-I_snapshots_default_test3_z0.00-0.00_All.npy
+  sfh_table: ../L-GALAXIES/LGalaxies2020_PublicRepository-master/AuxCode/Python/Database_SFH_table.fits
+  bundle: data/webapp_bundle_MilI.npz
+  n_galaxies: all
+  colour_cut: data/colour_cut_calibration.json
+
+baselines:
+  committed_basis: data/pca_results_bc03.npz
+  broadband_bands: [u, g, r, i, z]
+  sfh_bins: [2, 3, 4, 6, 8, 13]
+
+output:
+  dir: data/pca_experiments
+  figure_dir: figures/pca_basis
+  save_bases: true

@@ -1,0 +1,61 @@
+# The same experiment at R = 500, the resolution originally proposed for Task 3.
+#
+# Read documents/error_vs_bytes.md §2 before drawing conclusions from this run. At
+# R = 500 the evaluation grid is finer than the BC03 library **everywhere** in the
+# range — 100 % of the bins are oversampled, by up to 4.7x in the far UV and ~1.8x
+# in the optical. The extra columns are smooth interpolations of the library, not
+# extra spectral information.
+#
+# That does not make the run useless. It answers a specific question: does forcing
+# the PCA to reproduce a finer grid change which modes it selects, and does the
+# photometric error move? If the answers are "no" and "no", the R = 300 grid is
+# vindicated and the resolution question is closed. Run it and find out rather than
+# assuming.
+#
+# Component scan is shorter here because the point is the comparison at fixed N,
+# not a second full curve.
+
+name: bc03_R500
+
+library:
+  sed_grid: data/sed_grid_bc03.npz
+
+grid:
+  wave_min: 1048.0
+  wave_max: 23552.0
+  resolution: 500
+
+weighting:
+  - scheme: inverse_std
+    label: inverse_std
+  - scheme: inverse_rms
+    label: inverse_rms
+
+components:
+  max: 100
+  scan: [10, 25, 50, 100]
+
+photometry:
+  sets: [paus_nb, megacam, euclid, 2mass_ks, lgal_sdss]
+  min_coverage: 0.99
+
+d4000:
+  definitions: [D4000_n, D4000_w]
+  narrowband_redshifts: [0.4, 0.8]
+
+galaxies:
+  sample: ../L-GALAXIES/LGalaxies2020_PublicRepository-master/output/samples/Planck_Mil-I_snapshots_default_test3_z0.00-0.00_All.npy
+  sfh_table: ../L-GALAXIES/LGalaxies2020_PublicRepository-master/AuxCode/Python/Database_SFH_table.fits
+  bundle: data/webapp_bundle_MilI.npz
+  n_galaxies: all
+  colour_cut: data/colour_cut_calibration.json
+
+baselines:
+  committed_basis: data/pca_results_bc03.npz
+  broadband_bands: [u, g, r, i, z]
+  sfh_bins: []
+
+output:
+  dir: data/pca_experiments
+  figure_dir: figures/pca_basis_R500
+  save_bases: false
