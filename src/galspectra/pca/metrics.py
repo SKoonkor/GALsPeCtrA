@@ -1,34 +1,15 @@
 """
-Error metrics for spectral compression: photometry, D4000, and storage cost.
+Error metrics for spectral compression: photometry, D4000, storage cost.
 
-Everything here is built around one observation: **AB band flux is a linear
-functional of f_λ.** Writing
+AB band flux is a linear functional of f_λ, so the whole spectrum-to-band
+chain is one fixed matrix P (band_flux = flux_lambda @ P.T). That makes
+photometry a single matrix product instead of a per-spectrum loop, keeps
+truth and reconstruction on the identical operator, and lets composite-
+population photometry be evaluated without ever materialising a spectrum.
 
-    m_AB = -2.5 log10( ∫ f_ν T dν / ∫ T dν ) - 48.6
-
-the numerator is linear in f_ν, and f_ν = f_λ λ²/c is a diagonal map from f_λ, so the
-whole chain from spectrum to band flux is a single fixed matrix P:
-
-    band_flux = flux_lambda @ P.T
-
-That has three consequences worth the effort of exploiting:
-
-* **Speed.** 1,200 SSPs or 10,000 galaxies × 60 bands becomes one matrix product,
-  not a Python loop over `compute_ab_magnitudes`.
-* **Consistency.** Truth and reconstruction go through the identical operator, so a
-  difference in magnitudes is a difference in spectra and nothing else.
-* **Composition.** Because P is linear and reconstruction is linear, the band flux of
-  a composite population is the mass-weighted sum of the band fluxes of its SSPs.
-  Galaxy-level photometry can be evaluated without ever materialising a galaxy
-  spectrum.
-
-`BandOperator` reproduces `galspectra.photometry.synthetic.compute_ab_magnitudes`
-exactly — same trapezoid-in-frequency convention on the same grid — so the fast path
-and the production path cannot disagree. `tests/test_pca_basis_linearity.py` pins that.
-
-D4000 follows the same pattern. Both the direct spectral definition and Renard et
-al. (2022)'s narrow-band reconstruction are ratios of linear functionals, so each is
-a small matrix and both are evaluated the same way.
+`BandOperator` reproduces `photometry.synthetic.compute_ab_magnitudes` exactly;
+`tests/test_pca_basis_linearity.py` pins that the two agree. D4000 (direct
+and Renard et al. 2022's narrow-band form) follows the same pattern.
 """
 
 from __future__ import annotations
@@ -78,31 +59,15 @@ def _trapezoid_weights(x):
 class BandOperator:
     """Turns f_λ on a fixed grid into mean in-band f_ν, for a set of filters.
 
-    Parameters
-    ----------
-    wave : (N_wave,) — the SED grid, Å, strictly increasing
-    filters : dict {name: (wave_filter_AA, transmission)}
-    min_coverage : float
-        Reject a band whose transmission-weighted overlap with the SED grid falls
-        below this fraction of its total. A partially-covered band produces a
-        magnitude that looks plausible and is wrong, which is worse than a NaN.
-    convention : 'photon' (default) or 'energy'
-        The filter convolution convention, from
-        `galspectra.photometry.synthetic`. Both are linear in f_λ, so the
-        operator stays a matrix either way — only the weight changes.
+    wave : (N_wave,) SED grid, Å, strictly increasing
+    filters : {name: (wave_AA, transmission)}
+    min_coverage : reject a band whose SED-grid overlap falls below this
+        fraction — a partially-covered band gives a plausible wrong answer
+    convention : 'photon' (default) or 'energy'; imported from
+        `photometry.synthetic` so this and `compute_ab_magnitudes` cannot diverge
 
-        **This default is imported, never restated.** It has to be the same
-        object `compute_ab_magnitudes` uses: if the fast matrix path and the
-        production path could disagree about the convention, every number this
-        harness produces would silently stop being comparable with the validated
-        pipeline, and nothing would fail. `tests/test_pca_basis_linearity.py`
-        pins that the two agree.
-
-    Attributes
-    ----------
-    names : list[str] — bands that passed the coverage test, in input order
-    P : (N_band, N_wave) — band_flux = flux @ P.T
-    coverage : dict {name: fraction} — for every input band, including rejects
+    Attributes: names (bands that passed coverage), P ((N_band, N_wave):
+    band_flux = flux @ P.T), coverage (fraction per input band).
     """
 
     def __init__(self, wave, filters, min_coverage=0.99,
@@ -111,8 +76,7 @@ class BandOperator:
         if not np.all(np.diff(wave) > 0):
             raise ValueError("wave must be strictly increasing")
 
-        # Work in frequency-ascending order, matching compute_ab_magnitudes, which
-        # sorts by ν before integrating. On a λ-ascending grid that is a reversal.
+        # frequency-ascending order, matching compute_ab_magnitudes (reverse of λ order)
         nu = C_ANG_S / wave
         order = np.argsort(nu)
         v_nu_sorted = _trapezoid_weights(nu[order])
@@ -140,8 +104,7 @@ class BandOperator:
                 continue
 
             T_on_sed = np.interp(wave, wf, tf, left=0.0, right=0.0)
-            # The convention enters only through the weight function; the
-            # quadrature is unchanged, matching production exactly.
+            # convention enters only via the weight function, matching production
             w_on_sed = band_weight(nu, T_on_sed, convention)
             denom = float(np.sum(w_on_sed * v_nu))
             if denom <= 0:
@@ -211,19 +174,12 @@ D4000_DEFINITIONS = {
 
 
 def _window_mean_fnu_row(wave, lo, hi):
-    """Row r with r @ f_λ == mean f_ν over [lo, hi].
-
-    ⟨F_ν⟩ = ∫_lo^hi f_ν dλ / (hi - lo), with f_ν = f_λ λ²/c.  The integral is taken
-    over the SED grid with trapezoid weights restricted to the window, so a window
-    narrower than a few bins degrades gracefully rather than silently returning the
-    nearest single sample.
-    """
+    """Row r with r @ f_λ == mean f_ν over [lo, hi] (f_ν = f_λ λ²/c)."""
     from galspectra.pca.resample import cumulative_integral_matrix
 
     wave = np.asarray(wave, dtype=float)
     if lo < wave[0] or hi > wave[-1]:
         raise ValueError(f"window {lo}-{hi} Å outside grid {wave[0]:.0f}-{wave[-1]:.0f} Å")
-    # Integrate f_ν = f_λ · λ²/c, so integrate the *scaled* node values.
     T = cumulative_integral_matrix(wave, [lo, hi])
     row = (T[1] - T[0]) * (wave ** 2 / C_ANG_S) / (hi - lo)
     return row
@@ -254,39 +210,25 @@ def d4000_from_operator(op, flux):
 
 def d4000_narrowband_operator(wave, filters, redshift, definition="D4000_n",
                               sigma=None, min_r=1e-3):
-    """Renard et al. (2022) narrow-band D4000, as a (2, N_wave) operator.
+    """Renard et al. (2022) narrow-band D4000 (Eqs. 3-5), as a (2, N_wave) operator.
 
-    Implements Eqs. 3–5 for a source at `redshift`, evaluated against a *rest-frame*
-    spectrum. The redshift enters by blueshifting each band's response onto the rest
-    frame (λ_rest = λ_obs / (1+z)); the (1+z) and luminosity-distance factors that
-    convert rest-frame f_ν to observed f_ν are a single multiplicative constant and
-    cancel in the red/blue ratio, so no cosmology is needed.
+    Blueshifts each band onto the rest frame (λ_rest = λ_obs/(1+z)); the
+    (1+z)/distance factors are multiplicative constants that cancel in the
+    red/blue ratio, so no cosmology is needed.
 
-        Δλ_i = ∫ R_i dλ                                              (Eq. 5)
-        r_i  = ∫_window R_i dλ / ∫ R_i dλ                            (Eq. 4)
-        ⟨F_ν⟩ = Σ_i Δλ_i r_i² σ_i⁻² F_ν,i / Σ_i Δλ_i r_i² σ_i⁻²      (Eq. 3)
+        Δλ_i = ∫ R_i dλ                                          (Eq. 5)
+        r_i  = ∫_window R_i dλ / ∫ R_i dλ                        (Eq. 4)
+        ⟨F_ν⟩ = Σ_i Δλ_i r_i² σ_i⁻² F_ν,i / Σ_i Δλ_i r_i² σ_i⁻²  (Eq. 3)
 
-    Parameters
-    ----------
-    wave : (N_wave,) — rest-frame SED grid, Å
-    filters : dict {name: (wave_obs_AA, transmission)} — observed-frame responses
-    redshift : float
-    sigma : dict {name: float} or None
-        Per-band photometric uncertainties. `None` gives every band equal weight,
-        which is the right choice for noiseless model spectra: the σ⁻² factors then
-        cancel identically between numerator and denominator. Supplying real PAUS
-        uncertainties changes the weighting and is the correct thing to do when
-        comparing to data, so the argument exists.
-    min_r : float
-        Bands contributing less than this fraction of their response to the window
-        are dropped. Without it, a band with r ~ 1e-8 still enters the sum with
-        weight r² and only adds noise.
+    wave : (N_wave,) rest-frame SED grid, Å
+    filters : {name: (wave_obs_AA, transmission)} observed-frame responses
+    sigma : {name: float} or None (equal weight — correct for noiseless model
+        spectra; pass real uncertainties when comparing to data)
+    min_r : drop bands contributing less than this fraction of response to
+        the window (avoids r~0 bands adding pure noise at weight r²)
 
-    Returns
-    -------
-    (2, N_wave) operator, rows = blue then red, or raises if either window has no
-    contributing band (which is the honest outcome when the windows fall outside the
-    instrument's wavelength range at this redshift).
+    Returns (2, N_wave) operator [blue, red]; raises if a window has no
+    contributing band at this redshift.
     """
     win = D4000_DEFINITIONS[definition]
     wave = np.asarray(wave, dtype=float)
@@ -341,11 +283,10 @@ def d4000_narrowband_operator(wave, filters, redshift, definition="D4000_n",
 # ─────────────────────────────────────────────────────────────────────────────
 
 def mag_difference(truth_flux, recon_flux, band_op):
-    """Δm = m_recon − m_truth in **millimagnitudes**, shape (..., N_band).
+    """Δm = m_recon − m_truth in millimagnitudes, shape (..., N_band).
 
-    Computed from the flux ratio rather than by differencing two magnitudes, so it
-    is well defined wherever both band fluxes are positive and does not lose
-    precision when the two magnitudes are nearly equal.
+    Computed from the flux ratio, so it stays precise even when the two
+    magnitudes are nearly equal.
     """
     f_t = band_op.band_flux(truth_flux)
     f_r = band_op.band_flux(recon_flux)
@@ -355,12 +296,7 @@ def mag_difference(truth_flux, recon_flux, band_op):
 
 
 def summarise_mmag(dmag, axis=0):
-    """Robust and non-robust summaries of a Δmag array, in mmag.
-
-    Both are reported because they answer different questions: the median absolute
-    error is what a typical galaxy suffers, and the 99th percentile is what decides
-    whether a catalogue has a tail that will show up in a luminosity function.
-    """
+    """Robust and non-robust summary stats of a Δmag array, in mmag."""
     d = np.asarray(dmag, dtype=float)
     absd = np.abs(d)
     with np.errstate(invalid="ignore"):
@@ -377,9 +313,7 @@ def summarise_mmag(dmag, axis=0):
         }
 
 
-# Named rest-frame regions for the by-wavelength breakdown. The boundaries are
-# chosen where the *physics* changes, not on round numbers: the Lyman and Balmer
-# limits, the 4000 Å break, and the onset of the Rayleigh-Jeans tail.
+# rest-frame regions, boundaries at physical breaks (Lyman/Balmer limits, 4000 Å break)
 WAVELENGTH_REGIONS = {
     "far-UV (<1216 Å)": (0.0, 1216.0),
     "near-UV (1216-3646 Å)": (1216.0, 3646.0),
@@ -392,10 +326,7 @@ WAVELENGTH_REGIONS = {
 def region_flux_errors(wave, truth, recon, regions=None):
     """Median and 99th-percentile |Δf/f| within each named wavelength region.
 
-    Fractional flux error, not magnitude error, because these regions are not
-    passbands — no instrument integrates over "near-UV" — and a fractional flux
-    error is the quantity that propagates into whatever passband a reader cares
-    about.
+    Fractional flux error (not magnitude), since these are not real passbands.
     """
     regions = regions or WAVELENGTH_REGIONS
     wave = np.asarray(wave, dtype=float)
