@@ -1,60 +1,46 @@
 """
 validate_by_colour.py
 
-Validate the PCA SED reconstruction against native L-GALAXIES photometry, split by
-red/blue galaxy population.
+Validates the PCA SED reconstruction against native L-GALAXIES photometry,
+split by red/blue galaxy population.
 
-Why this exists
----------------
-The aggregate validation in `notebooks/validate_lgalaxies.ipynb` reports a single
-offset and scatter per band over the whole sample. That cannot detect a bias that
-affects one population and not the other. Paper I (Koonkor et al. 2026) finds that
-GALFORM overproduces faint *red and blue* galaxies as separate populations, so a
-colour-dependent reconstruction bias would corrupt exactly the comparison the
-programme rests on.
+A single offset/scatter per band over the whole sample (as in
+`notebooks/05_validate_against_lgalaxies.ipynb`) can't detect a bias that
+affects one population and not the other — and Paper I (Koonkor et al. 2026)
+finds GALFORM overproduces faint red *and* blue galaxies as separate
+populations, so a colour-dependent bias here would corrupt that comparison.
 
-Five classifications are used so the conclusion cannot rest on one cut:
-
-  lgal_gmm     DEFAULT. (g-r) >= the equal-posterior point of a two-component Gaussian
-               mixture fitted to the L-GALAXIES colour distribution itself. Calibrated
-               by scripts/colour_cut_calibration.py; constants read from
-               data/colour_cut_calibration.json.
-  lgal_tilted  The same calibration done in bins of M_r and fitted with Baldry's
-               functional form, so the cut tracks the valley as it drifts with
-               luminosity.
-  paper1       (Abs_g - Abs_r) >= 0.4. The cut in the author's own PAUS LF work
-               (GALFORM_LF/REFACTORED/galform_lf/observed_lf.py:26). Retained as a
-               comparison. It was applied to the GALFORM lightcone over 0 < z < 2 and
-               does NOT land in the L-GALAXIES valley -- it sits ~0.07 mag blueward,
-               on the steep red flank of the blue peak.
-  baldry       Baldry et al. (2004) tilted cut in (u-r) vs M_r:
-               (u-r)_cut = 2.06 - 0.244 * tanh((M_r + 20.07) / 1.09)
-  ssfr         log10(sSFR / yr^-1) < -11 -> quenched ("red"). Physics-based; independent
+Five classifications, so the conclusion doesn't rest on one cut:
+  lgal_gmm     DEFAULT. (g-r) >= equal-posterior point of a 2-component GMM
+               fitted to L-GALAXIES' own colour distribution (calibrated by
+               colour_cut_calibration.py, constants in
+               data/colour_cut_calibration.json).
+  lgal_tilted  Same calibration in bins of M_r, Baldry functional form, so
+               the cut tracks the valley as it drifts with luminosity.
+  paper1       (g-r) >= 0.4, the author's own PAUS LF cut
+               (GALFORM_LF/REFACTORED/galform_lf/observed_lf.py:26).
+               Calibrated for GALFORM over 0 < z < 2; does NOT land in the
+               L-GALAXIES valley (~0.07 mag blueward). Kept for comparison.
+  baldry       Baldry et al. (2004): (u-r)_cut = 2.06 - 0.244*tanh((M_r+20.07)/1.09).
+  ssfr         log10(sSFR/yr^-1) < -11 -> quenched. Physics-based, independent
                of the photometry being validated.
 
-Classes are always assigned on the NATIVE L-GALAXIES magnitudes, never on the
-reconstructed ones, so a reconstruction error cannot move a galaxy between classes
-and hide itself.
+Classes are always assigned on NATIVE magnitudes, never reconstructed ones,
+so a reconstruction error can't move a galaxy between classes and hide.
 
-Two residual families are kept strictly separate:
-
-  intrinsic   synth_mag_X  - Mag_X       measures the PCA reconstruction alone
-  dust        synth_magdust_X - MagDust_X   measures the PCA *plus* an irreducible term
-
-The birth-cloud parameter mu is drawn stochastically per galaxy inside L-GALAXIES and
-is never written to the output, so the dust residual contains a component that cannot
-be recovered by any reconstruction. Figure 5 tests that explanation rather than
-assuming it.
+Two residual families, kept strictly separate: intrinsic (synth_mag_X -
+Mag_X, the PCA reconstruction alone) and dust (synth_magdust_X -
+MagDust_X, the PCA plus an irreducible term — the birth-cloud mu is drawn
+stochastically per galaxy and never written to the output, so the dust
+residual has a component no reconstruction can recover; Figure 5 tests
+that rather than assuming it).
 
 Usage:
-  cd /path/to/GALsPeCtrA
   python scripts/validate_by_colour.py
   python scripts/validate_by_colour.py --outdir figures/validation_by_colour --no-show
 
-Outputs:
-  figures/validation_by_colour/fig{1..7}_*.png and .pdf
-  data/validation_by_colour_stats.json
-  data/validation_by_colour_outliers.csv
+Outputs: figures/validation_by_colour/fig{1..7}_*.png/.pdf,
+data/validation_by_colour_stats.json, data/validation_by_colour_outliers.csv.
 """
 
 import argparse
@@ -84,15 +70,9 @@ C_ALL = "#4a4a4a"
 PAPER1_CUT = 0.4          # observed_lf.py:26  RED_BLUE_CUT
 SSFR_CUT_LOG = -11.0      # log10(sSFR / yr^-1)
 
-# ── The default classification ───────────────────────────────────────────────
-# `paper1` (a flat g-r >= 0.4) was inherited from the PAUS LF pipeline, where it was
-# applied to the GALFORM lightcone over 0 < z < 2. It does not land in the L-GALAXIES
-# bimodality valley -- it sits ~0.07 mag blueward of it, on the steep red flank of the
-# blue peak, which makes the red fraction unusually sensitive to any colour shift.
-#
-# The default is now the value calibrated on L-GALAXIES itself by
-# scripts/colour_cut_calibration.py. Constants are read from the JSON that script
-# writes so the two cannot drift apart; the literals below are only a fallback.
+# default classification: calibrated on L-GALAXIES itself (see module docstring).
+# Constants read from the JSON colour_cut_calibration.py writes; literals below
+# are only a fallback.
 CALIBRATION_JSON = PROJECT_ROOT / "data" / "colour_cut_calibration.json"
 _FALLBACK_GMM_CUT = 0.4763
 _FALLBACK_TILT = {"a": 0.5606, "b": 0.1100, "c": 20.597, "d": 0.818}
@@ -167,12 +147,12 @@ def validity_masks(d):
     return ok_int, ok_dust
 
 
-# Galaxies below this cold gas mass are treated as gas-free. L-GALAXIES nonetheless
-# assigns some of them several magnitudes of attenuation, because the dust optical
-# depth is built from Z = MetalsColdGas / ColdGas, which is numerically meaningless
-# as ColdGas -> 0 (89 galaxies here have *negative* ColdGas). GALsPeCtrA's port
-# correctly returns A ~ 0 for them, so the two disagree by up to 4.3 mag through no
-# fault of the reconstruction. See documents/validation_by_colour.md section 6.
+# below this cold gas mass, galaxies are gas-free. L-GALAXIES still assigns some
+# several magnitudes of attenuation, because the dust optical depth uses
+# Z = MetalsColdGas/ColdGas, numerically meaningless as ColdGas -> 0 (89 galaxies
+# here have *negative* ColdGas). GALsPeCtrA correctly returns A~0, so the two
+# disagree by up to 4.3 mag through no fault of the reconstruction. See
+# documents/validation_by_colour.md §6.
 GAS_FREE_THRESHOLD = 1.0e5   # Msun
 
 
@@ -192,30 +172,25 @@ def classify(d):
     gr = d["MagDust_g"] - d["MagDust_r"]
     ok = (d["MagDust_g"] < MAG_SENTINEL) & (d["MagDust_r"] < MAG_SENTINEL)
 
-    # 0. DEFAULT: the cut calibrated on the L-GALAXIES colour distribution itself
-    #    (2-component GMM, equal-posterior point). See colour_cut_calibration.py.
-    out["lgal_gmm"] = (gr >= LGAL_GMM_CUT, ok)
+    out["lgal_gmm"] = (gr >= LGAL_GMM_CUT, ok)  # DEFAULT — see module docstring
 
-    # 0b. The magnitude-dependent version of the same calibration, Baldry functional
-    #     form fitted to per-magnitude-bin GMM valleys.
+    # magnitude-dependent version of the same calibration, Baldry form per-bin
     mr = d["MagDust_r"]
     tilt_cut = LGAL_TILT["a"] - LGAL_TILT["b"] * np.tanh((mr + LGAL_TILT["c"]) / LGAL_TILT["d"])
     out["lgal_tilted"] = (gr >= tilt_cut, ok)
 
-    # 1. Paper I: rest-frame (g-r) >= 0.4. Applied to the dust-attenuated native
-    #    magnitudes, since that is what an observer measures and what the PAUS LF
-    #    pipeline classifies on. Retained as a comparison, no longer the default.
+    # applied to dust-attenuated magnitudes, what an observer measures and what
+    # the PAUS LF pipeline classifies on
     out["paper1"] = (gr >= PAPER1_CUT, ok)
 
-    # 2. Baldry et al. (2004) tilted cut in (u-r) vs M_r.
+    # Baldry et al. (2004) tilted cut in (u-r) vs M_r
     ur = d["MagDust_u"] - d["MagDust_r"]
     mr = d["MagDust_r"]
     ok = ((d["MagDust_u"] < MAG_SENTINEL) & (d["MagDust_r"] < MAG_SENTINEL))
     cut = 2.06 - 0.244 * np.tanh((mr + 20.07) / 1.09)
     out["baldry"] = (ur >= cut, ok)
 
-    # 3. sSFR. A few entries are numerically zero or very slightly negative, so clip
-    #    before the log rather than letting them become -inf or NaN.
+    # clip before log: a few entries are zero or slightly negative
     ssfr = np.clip(d["sSFR"], 1e-16, None)
     out["ssfr"] = (np.log10(ssfr) < SSFR_CUT_LOG, np.ones(d["N"], bool))
 
@@ -299,9 +274,9 @@ def compute_all_stats(d, classes, ok_int, ok_dust):
 def gas_free_report(d, ok_int, ok_dust):
     """Quantify the gas-free dust pathology and its effect on the aggregate numbers.
 
-    Attenuation A = MagDust - Mag needs BOTH magnitudes valid. The two sentinel sets
-    differ (1,137 vs 1,179 galaxies), so a mask on MagDust alone would silently pair
-    a real MagDust with a Mag of 99.0 and report attenuations of order -117 mag.
+    Attenuation A = MagDust - Mag needs both magnitudes valid — the sentinel
+    sets differ (1,137 vs 1,179 galaxies), so masking on MagDust alone would
+    silently pair a real MagDust with Mag=99.0 and report A ~ -117 mag.
     """
     ok_att = ok_int & ok_dust
     gf = gas_free_mask(d)
@@ -488,8 +463,8 @@ def fig1_residual_vs_mag(plt, d, classes, ok_int, ok_dust, outdir):
                             label=f"{lab} (N={int(m.sum()):,})")
             ax.axhline(0, color="k", lw=0.8, ls="--", alpha=0.6)
             ax.set_xlim(-24, -16)
-            # Intrinsic residuals live in a ~0.06 mag range; a wide axis would hide
-            # the colour split, which is the whole point of this figure.
+            # intrinsic residuals live in ~0.06 mag; a wide axis would hide the
+            # colour split, the whole point of this figure
             ax.set_ylim(-0.03, 0.09) if row == 0 else ax.set_ylim(-1.6, 1.6)
             if row == 0:
                 ax.set_title(f"${band}$")
@@ -687,8 +662,8 @@ def fig6_robustness(plt, stats, outdir):
               "paper1": r"Paper I  $g-r\geq0.4$",
               "baldry": "Baldry+2004 $u-r$ tilted",
               "ssfr": r"sSFR  $\log\,{\rm sSFR}<-11$"}
-    # Marker shape encodes the definition, colour encodes the population. Opacity is
-    # not used for identity -- five levels of it are not separable by eye.
+    # marker shape = definition, colour = population; not opacity — five
+    # levels of it aren't separable by eye
     markers = ["o", "s", "^", "D", "v"]
     fig, axes = plt.subplots(2, 2, figsize=(12.5, 7.5))
     x = np.arange(len(BANDS))
@@ -710,8 +685,8 @@ def fig6_robustness(plt, stats, outdir):
             ax.set_ylabel(ylab)
             ax.set_title(f"{flavour}")
             if stat == "mad" and flavour == "dust":
-                # A class with too few members can give MAD = 0, which on a log axis
-                # drags the lower limit to 1e-17. Clamp to the range that carries data.
+                # a too-small class can give MAD=0, dragging a log axis to 1e-17;
+                # clamp to the range that carries data
                 vals = [v for k in defs for b in BANDS for cls in ("red", "blue")
                         if (v := stats[k][flavour][b][cls][stat]) and v > 0]
                 if vals:
