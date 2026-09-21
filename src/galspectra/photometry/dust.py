@@ -50,18 +50,7 @@ _VBAND_MUM        = 0.55   # V-band reference wavelength in μm
 
 
 def mathis_extinction(wave_ang):
-    """
-    Interpolate (A_λ/A_V, Albedo) from the Mathis 1983 table.
-
-    Parameters
-    ----------
-    wave_ang : array_like — wavelength in Å
-
-    Returns
-    -------
-    alav   : ndarray — A_λ/A_V (same shape as wave_ang)
-    albedo : ndarray — dust albedo (same shape as wave_ang)
-    """
+    """Interpolate (A_λ/A_V, albedo) from the Mathis 1983 table; wave_ang in Å."""
     wave_mum = np.asarray(wave_ang, dtype=float) * 1e-4   # Å → μm
     alav   = np.interp(wave_mum, _MATHIS_LAMBDA_MUM, _MATHIS_AV,
                        left=_MATHIS_AV[0], right=0.0)
@@ -71,19 +60,11 @@ def mathis_extinction(wave_ang):
 
 
 def ism_optical_depth(wave_ang, Zg_solar, n_h, cos_incl):
-    """
-    Compute per-wavelength ISM optical depth τ_λ.
+    """Per-wavelength ISM optical depth τ_λ.
 
-    Parameters
-    ----------
-    wave_ang  : (N,) — wavelength in Å
-    Zg_solar  : float — gas metallicity in solar units (= Z_gas / 0.02)
-    n_h       : float — H column density in units of [2.1×10²¹ atoms/cm²]
-    cos_incl  : float — cos(inclination), clamped to [0.2, 1]
-
-    Returns
-    -------
-    tau : (N,) — ISM optical depth τ_λ (before inclination; already includes sec(i))
+    wave_ang : (N,) Å. Zg_solar : gas metallicity, Z_gas/0.02. n_h : H column
+    density, [2.1e21 atoms/cm²] units. cos_incl : clamped to [0.2, 1].
+    Returns tau (N,), sec(i) already applied.
     """
     alav, albedo = mathis_extinction(wave_ang)
     wave_mum = np.asarray(wave_ang, dtype=float) * 1e-4
@@ -101,17 +82,7 @@ def ism_optical_depth(wave_ang, Zg_solar, n_h, cos_incl):
 
 
 def ism_attenuation(tau):
-    """
-    Slab-geometry attenuation factor a_λ = (1 − exp(−τ)) / τ.
-
-    Parameters
-    ----------
-    tau : array_like — optical depth
-
-    Returns
-    -------
-    a_lam : ndarray — attenuation factor in [0, 1]
-    """
+    """Slab-geometry attenuation a_λ = (1 − exp(−τ)) / τ, in [0, 1]."""
     tau = np.asarray(tau, dtype=float)
     a = np.where(tau > 0, (1.0 - np.exp(-tau)) / tau, 1.0)
     return a
@@ -119,42 +90,26 @@ def ism_attenuation(tau):
 
 def hydrogen_column_density(cold_gas_msun, cold_gas_radius_mpc_h, hubble_h=0.673,
                              redshift=0.0):
-    """
-    Compute the mean H column density N_H in [2.1×10²¹ atoms/cm²] units.
+    """Mean H column density N_H, in [2.1×10²¹ atoms/cm²] units.
 
-    Uses the same formula as L-GALAXIES model_dust.c, adapted for the .npy sample
-    where ColdGas is in Msun (not 10^10 Msun/h) and ColdGasRadius is in Mpc/h.
-
-    Parameters
-    ----------
-    cold_gas_msun       : float — cold gas mass in Msun
-    cold_gas_radius_mpc_h : float — disk scale (3× scale length) in Mpc/h
-    hubble_h            : float — Hubble parameter h
-    redshift            : float — galaxy redshift (for (1+z)^-1 correction)
-
-    Returns
-    -------
-    n_h : float — column density in [2.1×10²¹ atoms/cm²] units
+    Same formula as L-GALAXIES model_dust.c, adapted for the .npy sample
+    (ColdGas in Msun, not 1e10 Msun/h; ColdGasRadius in Mpc/h).
     """
     if cold_gas_msun <= 0 or cold_gas_radius_mpc_h <= 0:
         return 0.0
 
-    # Convert to code units: 10^10 Msun/h
-    cold_gas_code = cold_gas_msun * hubble_h / 1e10
+    cold_gas_code = cold_gas_msun * hubble_h / 1e10  # code units: 1e10 Msun/h
 
-    # N_H in [10^10 Msun/h / (Mpc/h)^2] units, then divide by 3252.37 to get
-    # [2.1×10^21 atoms/cm^2] units  (0.94 = 2.83/3 from disk profile integration)
+    # N_H in [1e10 Msun/h / (Mpc/h)^2], then / 3252.37 for [2.1e21 atoms/cm^2]
+    # (0.94 = 2.83/3 from disk profile integration)
     n_h = cold_gas_code / (np.pi * (cold_gas_radius_mpc_h * 0.94) ** 2 * 1.4) / 3252.37
 
-    # Redshift evolution
-    n_h *= (1.0 + redshift) ** (-1.0)
+    n_h *= (1.0 + redshift) ** (-1.0)  # redshift evolution
     return max(float(n_h), 0.0)
 
 
 def draw_mu(rng=None):
-    """
-    Draw birth-cloud inclination parameter μ from Gaussian(0.3, 0.2), clamped to [0.1, 1.0].
-    """
+    """Draw μ from Gaussian(0.3, 0.2), clamped to [0.1, 1.0]."""
     if rng is None:
         rng = np.random.default_rng()
     for _ in range(1000):
@@ -165,21 +120,11 @@ def draw_mu(rng=None):
 
 
 def birthcloud_optical_depth(wave_ang, tau_v_ism, mu):
-    """
-    Compute birth cloud optical depth τ_BC_λ for young disk stars.
+    """Birth-cloud optical depth for young disk stars.
 
-    τ_BC_λ = τ_V_BC × (λ / 0.55 μm)^(-0.7)
-    τ_V_BC = τ_V_ISM × (1/μ − 1)
+        τ_BC_λ = τ_V_BC × (λ / 0.55 μm)^(-0.7)     τ_V_BC = τ_V_ISM × (1/μ − 1)
 
-    Parameters
-    ----------
-    wave_ang  : (N,) — wavelength in Å
-    tau_v_ism : float — V-band ISM optical depth (with sec(i) already applied)
-    mu        : float — birth-cloud inclination factor, drawn from Gaussian
-
-    Returns
-    -------
-    tau_bc : (N,) — birth cloud optical depth per wavelength
+    tau_v_ism : V-band ISM optical depth (sec(i) already applied).
     """
     tau_v_bc = tau_v_ism * (1.0 / mu - 1.0)
     wave_mum = np.asarray(wave_ang, dtype=float) * 1e-4
@@ -195,33 +140,17 @@ def apply_dust_to_seds(wave_ang,
                        redshift=0.0,
                        hubble_h=0.673,
                        rng=None):
-    """
-    Apply the complete L-GALAXIES two-component dust model to a galaxy SED.
+    """L-GALAXIES' two-component dust model (model_dust.c, OUTPUT_REST_MAGS branch):
 
-    Implements the formula from model_dust.c (OUTPUT_REST_MAGS branch):
-        SED_dust = SED_bulge_old
-                 + SED_bulge_young × ExpTauBCBulge            (= 0.5)
-                 + (SED_disk_old + SED_disk_young) × a_λ      (ISM on all disk)
-                 − SED_disk_young × a_λ × (1 − exp(−τ_BC_λ)) (extra BC on young disk)
+        SED_dust = SED_bulge_old + SED_bulge_young × ExpTauBCBulge (=0.5)
+                 + (SED_disk_old + SED_disk_young) × a_λ         (ISM, all disk)
+                 − SED_disk_young × a_λ × (1 − exp(−τ_BC_λ))    (extra BC, young disk)
 
-    Parameters
-    ----------
-    wave_ang              : (N_wave,) — wavelength in Å
-    sed_disk_old          : (N_wave,) — old disk SED (age ≥ 10 Myr)
-    sed_disk_young        : (N_wave,) — young disk SED (age < 10 Myr)
-    sed_bulge_old         : (N_wave,) — old bulge SED
-    sed_bulge_young       : (N_wave,) — young bulge SED
-    cold_gas_msun         : float — ColdGas in Msun (from .npy sample)
-    cold_gas_radius_mpc_h : float — ColdGasRadius in Mpc/h
-    metals_cold_gas       : array of length ≥1 — MetalsColdGas in Msun (3 channels)
-    cos_incl              : float — CosInclination (from galaxy sample)
-    redshift              : float — galaxy redshift
-    hubble_h              : float — Hubble h
-    rng                   : numpy Generator or None — for μ sampling
+    sed_disk/bulge_old/young : (N_wave,) SEDs; old = age ≥ 10 Myr.
+    cold_gas_msun, cold_gas_radius_mpc_h, metals_cold_gas, cos_incl : from the
+    galaxy sample. rng : for μ sampling.
 
-    Returns
-    -------
-    sed_dust : (N_wave,) — total dust-attenuated SED (same units as inputs)
+    Returns sed_dust : (N_wave,).
     """
     wave_ang = np.asarray(wave_ang, dtype=float)
 
@@ -232,20 +161,18 @@ def apply_dust_to_seds(wave_ang,
     else:
         Zg_solar = 0.0
 
-    # Column density
     n_h = hydrogen_column_density(cold_gas_msun, cold_gas_radius_mpc_h,
                                   hubble_h=hubble_h, redshift=redshift)
 
     if n_h <= 0 or Zg_solar <= 0:
-        # No dust
+        # no dust: return unattenuated sum
         return sed_disk_old + sed_disk_young + sed_bulge_old + sed_bulge_young
 
-    # ISM attenuation factor a_λ
     tau_lam = ism_optical_depth(wave_ang, Zg_solar, n_h, cos_incl)
-    a_lam   = ism_attenuation(tau_lam)
+    a_lam   = ism_attenuation(tau_lam)  # ISM attenuation factor a_λ
 
-    # V-band τ (for birth cloud calibration) — evaluate at 0.55 μm
-    alav_v, albedo_v = mathis_extinction(np.array([5500.0]))  # 5500 Å = V band
+    # V-band τ for birth-cloud calibration (5500 Å = V band)
+    alav_v, albedo_v = mathis_extinction(np.array([5500.0]))
     alav_v = alav_v[0]; albedo_v = albedo_v[0]
     Zg = max(float(Zg_solar), 1e-6)
     alav_v_eff = alav_v * Zg ** 1.6 * (1.0 - albedo_v) ** 0.5
