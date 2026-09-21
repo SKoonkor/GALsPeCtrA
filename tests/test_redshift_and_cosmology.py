@@ -1,11 +1,5 @@
-"""
-Redshifting and cosmology.
-
-The spectral stretch and the distance scaling are tested apart, because they fail
-differently: a (1+z) error in the stretch produces wrong colours that look like
-astrophysics, while a distance error produces an offset so large nobody could miss it.
-Tested together, the first would hide behind the second.
-"""
+"""Redshifting and cosmology. The spectral stretch and distance scaling are
+tested separately."""
 
 from __future__ import annotations
 
@@ -25,11 +19,7 @@ from galspectra.photometry.redshift import (
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_parameters_match_the_simulation():
-    """These are L-GALAXIES' values, not defaults.
-
-    From `input/input_MR_W1_PLANCK_LGals2020_DM.par:50-52`. If they drift, GALsPeCtrA and
-    the simulation it post-processes are describing different universes.
-    """
+    """Cosmology constants match L-GALAXIES' own parameter file."""
     assert cos.HUBBLE_H == 0.673
     assert cos.OMEGA_M == 0.315
     assert cos.OMEGA_LAMBDA == 0.685
@@ -51,13 +41,7 @@ def test_distance_modulus_matches_its_definition():
 
 
 def test_lgalaxies_own_integrator_agrees_to_half_a_percent():
-    """The model's `lum_distance()` is a hand-rolled Simpson rule with several defects.
-
-    Quantified rather than inherited: it agrees with astropy to better than 0.4 % out to
-    z = 5, which is 8.5 mmag in distance modulus. That is small, and it does not touch
-    the `ObsMag` comparison at all, since `ObsMag` is an absolute magnitude. Pinned so a
-    change in either implementation is noticed.
-    """
+    """L-GALAXIES' own lum_distance() agrees with astropy to better than 0.5%."""
     for z in (0.5, 1.0, 2.0, 5.0):
         ours = cos.luminosity_distance_mpc(z)
         theirs = cos.lgal_luminosity_distance_mpc(z)
@@ -76,8 +60,7 @@ def spectrum():
 
 
 def test_z_zero_is_the_identity(spectrum):
-    """Not approximately: exactly. A pipeline that sweeps a redshift grid starting at
-    zero must not perturb the rest-frame case."""
+    """z=0 is the identity, exactly."""
     wave, flux = spectrum
     w, f = observed_frame(wave, flux, 0.0)
     assert np.array_equal(w, wave)
@@ -93,12 +76,7 @@ def test_round_trip_recovers_the_rest_frame(spectrum):
 
 
 def test_the_stretch_conserves_energy(spectrum):
-    """int f_lambda dlambda is invariant under the stretch.
-
-    The (1+z) divisor on the flux density exists precisely to cancel the (1+z) stretch of
-    the wavelength interval. Getting the divisor backwards would change the integral by
-    (1+z)^2 and is the single most likely error in this function.
-    """
+    """∫f_λ dλ is invariant under the redshift stretch."""
     wave, flux = spectrum
     total_rest = np.trapezoid(flux, wave)
     for z in (0.5, 2.0, 5.0):
@@ -132,11 +110,7 @@ def _flat_filters():
 
 
 def test_apparent_is_absolute_plus_the_distance_modulus():
-    """The two entry points differ by exactly one number, and it is the modulus.
-
-    `ObsMag` in L-GALAXIES is the *absolute* observer-frame magnitude, so the split is
-    what makes the validation against it meaningful.
-    """
+    """apparent_magnitudes == observed_frame_absolute_magnitudes + distance_modulus."""
     wave = np.geomspace(1000.0, 25000.0, 600)
     flux = (wave / 5500.0) ** -1.0
     filters = _flat_filters()
@@ -150,19 +124,7 @@ def test_apparent_is_absolute_plus_the_distance_modulus():
 
 
 def test_a_flat_f_nu_source_brightens_by_exactly_2p5_log10_1pz():
-    """For f_nu = const, redshifting changes the magnitude by exactly -2.5 log10(1+z).
-
-    This isolates the amplitude convention from the band shift. A source flat in f_nu has
-    no colour, so the filter samples the same value wherever it lands and the *only*
-    thing left is the (1+z) factor:
-
-        f_lambda -> f_lambda/(1+z)  and  lambda -> lambda(1+z)   =>   f_nu -> f_nu(1+z)
-
-    which is the standard relation for a luminosity placed at a redshift, and the same
-    factor L-GALAXIES applies at `model_spectro_photometric.c:259`. A missing, doubled or
-    inverted (1+z) fails here by a clean multiple of 2.5 log10(1+z), which is far easier
-    to diagnose than a smeared colour error.
-    """
+    """A flat-f_nu source brightens by exactly -2.5 log10(1+z) under redshifting."""
     wave = np.geomspace(1000.0, 40000.0, 2000)
     C = 2.99792458e18
     f_lam = C / wave ** 2                       # f_lambda for constant f_nu = 1
