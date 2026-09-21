@@ -167,12 +167,10 @@ def main():
         native = np.asarray(sample["ObsMag"], dtype=float)[keep]
         snap = int(sample["SnapNum"][0])
 
-        # The output *filename* carries the redshift that was asked for in
-        # desired_output_redshifts.txt; the galaxies in it are at the nearest
-        # simulation snapshot, whose redshift is different — by up to 0.27 here. Using
-        # the filename's value produces residuals of tenths of a magnitude and looks
-        # like a broken k-correction. So recover the redshift the snapshot actually
-        # sits at, by asking which one reproduces ObsMag, and report both.
+        # The output filename carries the requested redshift, not the snapshot's
+        # actual one (differs by up to 0.27 here) — using the filename value gives
+        # tenths-of-a-mag residuals that look like a broken k-correction. Recover
+        # the actual redshift by asking which one reproduces ObsMag.
         z_eff = _fit_redshift(wave, seds, native, filters, z, keep)
 
         wave_obs, seds_obs = observed_frame(wave, seds, z_eff)
