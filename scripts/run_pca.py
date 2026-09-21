@@ -25,60 +25,34 @@ args = parser.parse_args()
 INPUT_FILE  = Path(args.input)
 OUTPUT_FILE = Path(args.output)
 
-# Load SEDs
 print ("\nLoading SEDs")
 data = load_sed_grid(INPUT_FILE)
-
 print (data.keys())
 
 wave = data["wave"]
 seds = data["seds"]
 print (f"Loaded SEDs: {seds.shape}")
 
-# Mask wavelength
 print ("\nMasking wavelength")
 wave, seds = mask_wavelength(wave, seds, args.wave_min, args.wave_max)
 print (f"After masking: {seds.shape}")
 
-# Normalize
 print ("\nNormalizing SEDs")
 seds_norm, norm_meta = normalize_seds(seds, method="std", wave=wave)
 
-# PCA
 print ("\nRunning PCA on normalized SEDs")
 pca_dict = compute_pca(seds_norm, n_components=args.n_components)
 
-# Add metadata
 pca_dict["norm"] = norm_meta
 pca_dict["wave"] = wave
 pca_dict["params"] = data["params"]
 pca_dict["param_names"] = data["param_names"]
 pca_dict["config"] = data["config"]
 
-
-# Save
 print ("\nSaving PCA results")
 save_pca_results(OUTPUT_FILE, pca_dict)
-
 print (f"PCA results save to: {OUTPUT_FILE}")
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Test zone
 print ("\nSanity Check")
 print ("-"*12)
 print ("\nVariance of first 10 PCs")
@@ -91,14 +65,8 @@ coeffs = pca_dict["coeffs"]
 components = pca_dict["components"]
 mean = pca_dict["mean"]
 
-# reconstruct first SED
 recon = mean + coeffs[0] @ components
-
-# compare
 original = seds_norm[0]
 
 error = np.mean((recon - original)**2)
 print("Reconstruction MSE:", error)
-
-
-

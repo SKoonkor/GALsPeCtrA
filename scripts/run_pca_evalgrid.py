@@ -1,26 +1,14 @@
 """
 run_pca_evalgrid.py
 
-Fit the production PCA basis on the resampled, science-motivated evaluation
-grid (R=300, 1048-23552 A -- configs/pca_experiments/default.yaml) instead of
-the native BC03 831-bin grid that scripts/run_pca.py fits on.
-
-This is the basis refit motivated by Sec 5.2 of the paper: fitting on the
-evaluation grid removes the components the native-grid basis spends on
-wavelengths (805-1048 A, 23552-29950 A) no photometric band in the paper
-reaches, and was measured to improve PAUS narrow-band accuracy by ~1.4x at
-the same storage cost. This script makes that basis the one exported to
-L-GALAXIES, rather than leaving it as a resampled-grid-only comparison.
-
-Same steps as run_pca.py (mask -> normalize("std") == inverse_std weighting
--> compute_pca), except the "mask" step is a flux-conserving resample rather
-than a simple wavelength cut, using the exact resampling_matrix() function
-pca_basis_experiment.py already uses for the evaluation-grid comparison.
-
-Output schema matches run_pca.py exactly (coeffs, components, variance, mean,
-wave, norm, params, param_names, config), so export_pca_for_lgalaxies.py and
-every downstream consumer (process_lgalaxies.py, the notebooks) work
-unchanged.
+Fits the production PCA basis on the resampled evaluation grid (R=300,
+1048-23552 A) instead of the native BC03 831-bin grid run_pca.py uses —
+removes components spent on wavelengths (805-1048, 23552-29950 A) no
+photometric band reaches, ~1.4x better PAUS narrow-band accuracy at the same
+storage cost. Same steps as run_pca.py, except the mask is a flux-conserving
+resample (resampling_matrix(), as pca_basis_experiment.py uses) rather than a
+wavelength cut. Output schema matches run_pca.py exactly, so
+export_pca_for_lgalaxies.py and every downstream consumer are unaffected.
 
 Usage:
     python scripts/run_pca_evalgrid.py
