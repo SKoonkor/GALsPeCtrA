@@ -1,18 +1,11 @@
 """
 Figures for the weighted-PCA experiment.
 
-Palette
--------
-Five categorical hues from the Okabe-Ito set, validated with the dataviz palette
-checker in light mode: lightness band PASS, chroma floor PASS, CVD separation PASS
-(worst adjacent pair ΔE 9.6 deutan, above the 8 floor), normal-vision floor PASS
-(18.4), contrast WARN on two of the five. The contrast warning obliges visible
-labels rather than colour alone, so every series is **direct-labelled at its right
-end and given its own marker shape**. Identity is never carried by colour alone.
-
-Baselines are drawn in neutral grey with distinct dash patterns. They are reference
-lines, not members of the categorical series, and giving them a sixth hue would
-imply they belong to the same family.
+Five categorical hues (Okabe-Ito), validated with the dataviz palette
+checker: CVD separation PASS (worst pair ΔE 9.6 deutan), contrast WARN on
+two of five — so every series is direct-labelled at its right end with its
+own marker shape; identity is never carried by colour alone. Baselines are
+neutral grey with distinct dash patterns, not a sixth categorical hue.
 """
 
 from __future__ import annotations
@@ -97,10 +90,9 @@ def _direct_label(ax, x, y, text, colour, dx=1.03, fontsize=8.0):
 class _LabelStack:
     """Collects labels and places them with a guaranteed vertical gap.
 
-    Several of these curves lie almost on top of one another — which is itself a
-    finding — so their end labels would otherwise overprint into an unreadable
-    smear. Labels are pushed apart in *display* space and joined to their anchor by
-    a hairline leader, so the association stays unambiguous without moving the data.
+    Several curves lie almost on top of one another (itself a finding), so
+    labels are pushed apart in display space and joined to their anchor by a
+    hairline leader, keeping the association unambiguous without moving data.
     """
 
     def __init__(self, ax, min_gap_px=11.0, fontsize=8.0):
@@ -177,9 +169,8 @@ def fig_error_vs_bytes(results, path):
                     markeredgecolor="white", markeredgewidth=0.7, zorder=3)
             stack.add(x[ok][-1], y[ok][-1], lab, SCHEME_COLOURS[lab])
 
-        # Only the baselines that carry an argument get named on the plot; the
-        # rest are in the CSV. A chart labelled with everything is labelled with
-        # nothing.
+        # only baselines that carry an argument get named on the plot (rest in CSV) —
+        # a chart labelled with everything is labelled with nothing
         keep = ("previous", "13 bins", "broadband", "2 bins")
         for b in results["baselines"]:
             y = _metric(b, key)
@@ -342,8 +333,7 @@ def fig_variance_trap(results, path):
         ax.plot(v[ok], y[ok], "-", color=SCHEME_COLOURS[lab], linewidth=2.0,
                 marker=SCHEME_MARKERS[lab], markersize=4.5,
                 markeredgecolor="white", markeredgewidth=0.7)
-        # Component counts are marked on one series only. They are the same counts
-        # on every series, and repeating them five times obscures the point.
+        # component counts marked on one series only (same on every series; repeating obscures)
         if lab == "uniform":
             for r, xx, yy in zip(np.array(runs)[ok], v[ok], y[ok]):
                 if r["n_components"] in (10, 25, 50, 100, 200):
