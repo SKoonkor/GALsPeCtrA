@@ -6,12 +6,6 @@
 # in the optical. The extra columns are smooth interpolations of the library, not
 # extra spectral information.
 #
-# That does not make the run useless. It answers a specific question: does forcing
-# the PCA to reproduce a finer grid change which modes it selects, and does the
-# photometric error move? If the answers are "no" and "no", the R = 300 grid is
-# vindicated and the resolution question is closed. Run it and find out rather than
-# assuming.
-#
 # Component scan is shorter here because the point is the comparison at fixed N,
 # not a second full curve.
 
