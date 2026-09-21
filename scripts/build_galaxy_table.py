@@ -100,9 +100,8 @@ def build_property_table(sample_file: Path, coeffs_file: Path) -> dict:
     table["n_galaxies"] = np.int64(N)
     table["source_sample"] = str(sample_file.name)
 
-    # The synth_* columns above are *copied* from the coefficients file, so this
-    # table carries only one filter-convolution convention. Carry the product's
-    # own record forward, and refuse to build if the record is missing.
+    # synth_* columns are copied from the coefficients file, so this table
+    # carries one convention — refuse to build if the record is missing
     if "convention" not in coeffs_npz:
         raise ValueError(
             f"{coeffs_file.name} predates the convention record, so its magnitudes "
