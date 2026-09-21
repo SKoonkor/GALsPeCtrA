@@ -1,45 +1,20 @@
 """
-Star-formation histories expressed as a mass-weight matrix over the SSP library.
+Star-formation histories as a mass-weight matrix over the SSP library.
 
-The idea
---------
-Building a composite population means evaluating
-
-    L_gal(λ) = Σ_bins m_bin · S(λ; age_bin, Z_bin)
-
-where S is the library, bilinearly interpolated in (age, Z). Bilinear interpolation
-is itself linear in the library, so S(age, Z) is a weighted sum of at most four
-library entries. Substituting that back gives
-
-    L_gal(λ) = Σ_ssp W_gal,ssp · X_ssp(λ)          W = mass-weighted bilinear weights
-
-so an entire galaxy sample becomes a single matrix W of shape (N_gal, N_ssp), and
-**every** derived quantity is one matrix product away:
+Bilinear interpolation is itself linear in the library, so
+L_gal(λ) = Σ_bins m_bin · S(λ; age_bin, Z_bin) reduces to a single matrix W
+of shape (N_gal, N_ssp):
 
     galaxy spectra     = W @ X
     galaxy band fluxes = W @ (X @ P.T)
-    row sums of W      = total formed stellar mass
+    W.sum(axis=1)      = total formed stellar mass (M_total)
 
-The last point matters for this project specifically: `W.sum(axis=1)` *is* M_total,
-so the mass term that the stored `pca_coeffs` product currently omits falls out of
-the same construction that produces the coefficients.
+Truth and any candidate basis then share one code path (W @ X vs W @ X̂), so
+per-galaxy error is exactly the per-SSP error propagated through W.
 
-Why this is worth doing rather than looping
--------------------------------------------
-It is not only faster. It makes the truth and every candidate basis share one code
-path: the truth is `W @ X`, a reconstruction is `W @ X̂`, and the difference between
-them can only come from `X̂ − X`. There is no opportunity for the two sides of the
-comparison to drift apart through separate loops, and the per-galaxy error is the
-per-SSP error propagated through exactly the weights that define the galaxy.
-
-Deviation from the production path, stated plainly
---------------------------------------------------
-`csp/interpolator.py` builds `RegularGridInterpolator(..., fill_value=None)`, which
-**extrapolates** off the age and metallicity grid rather than failing. This module
-**clamps** instead, and reports how many bins were clamped. For the Millennium-I
-z=0 sample the difference is nil — every SFH bin lies inside the grid, and the
-metallicities are already clipped upstream — but clamping is the right behaviour for
-an offline experiment and the count makes any future sample's exposure visible.
+Deviates from `csp/interpolator.py`, which extrapolates off the age/Z grid
+(`fill_value=None`): this module clamps instead and reports the count. Nil
+effect on the Millennium-I z=0 sample (every bin lies inside the grid).
 """
 
 from __future__ import annotations
@@ -52,13 +27,11 @@ __all__ = ["SSPGridIndex", "bilinear_weights", "build_weight_matrix"]
 class SSPGridIndex:
     """Maps (age, logzsol) onto row indices of a rectangular SSP library.
 
-    Parameters
-    ----------
-    params : (N_ssp, 2) — the library's parameter table
-    param_names : sequence of str — must contain 'tage' and 'logzsol'
+    params : (N_ssp, 2) library parameter table
+    param_names : must contain 'tage' and 'logzsol'
 
-    The library must be a complete rectangular grid; a missing corner would make
-    bilinear interpolation silently wrong, so it is checked.
+    Requires a complete rectangular grid (checked) — a missing corner would
+    make bilinear interpolation silently wrong.
     """
 
     def __init__(self, params, param_names):
@@ -101,9 +74,8 @@ class SSPGridIndex:
 def _bracket(grid, values):
     """Lower index and interpolation fraction, clamped to the grid.
 
-    Returns (i, t, n_clamped) with the point lying between grid[i] and grid[i+1]
-    and t in [0, 1]. Points outside the grid land on the nearest edge with t at 0
-    or 1, so the result is the boundary value rather than an extrapolation.
+    Returns (i, t, n_clamped); points outside the grid clamp to the nearest
+    edge (t=0 or 1) rather than extrapolating.
     """
     n = grid.size
     if n < 2:
@@ -118,11 +90,8 @@ def _bracket(grid, values):
 def bilinear_weights(index, ages, zsol):
     """Four (row, weight) pairs per input point.
 
-    Returns
-    -------
-    rows : (N, 4) int64 — library row indices
-    wts  : (N, 4) float64 — bilinear weights, each row summing to 1
-    n_clamped : dict — how many points fell outside each axis
+    Returns rows (N,4) int64 library indices, wts (N,4) float64 weights
+    (each row sums to 1), and n_clamped per axis.
     """
     ia, ta, n_ca = _bracket(index.ages, ages)
     iz, tz, n_cz = _bracket(index.zsol, zsol)
@@ -145,24 +114,14 @@ def bilinear_weights(index, ages, zsol):
 def build_weight_matrix(index, sfh_records, components=("disk", "bulge"), dtype=np.float64):
     """Assemble the (N_gal, N_ssp) mass-weight matrix for a galaxy sample.
 
-    Parameters
-    ----------
-    index : SSPGridIndex
-    sfh_records : sequence of dicts as returned by
-        `galspectra.lgalaxies.extract_sfh` — each with 'age_Gyr', and
-        '<component>_mass' / 'logzsol_<component>' for each requested component.
-    components : which stellar components to sum. Disk and bulge are tracked
-        separately by L-GALAXIES because they carry different metallicities; both
-        contribute to the total light.
+    sfh_records : dicts as returned by `galspectra.lgalaxies.extract_sfh`
+        ('age_Gyr', '<component>_mass', 'logzsol_<component>' per component).
+    components : disk and bulge are tracked separately (different metallicities).
 
-    Returns
-    -------
-    W : (N_gal, N_ssp) — W.sum(axis=1) is the total formed stellar mass per galaxy
-    info : dict — clamping counts and the number of bins with non-positive mass
-
-    Zero-mass bins are dropped rather than contributing a zero-weighted
-    interpolation, so a bin with an undefined metallicity (which L-GALAXIES writes
-    when no stars formed) cannot poison the result.
+    Returns (W, info): W.sum(axis=1) is total formed stellar mass per galaxy;
+    info carries clamping counts and zero-mass bins skipped (dropped rather
+    than interpolated at zero weight, since L-GALAXIES writes an undefined
+    metallicity there).
     """
     n_gal = len(sfh_records)
     W = np.zeros((n_gal, index.n_ssp), dtype=dtype)
