@@ -4,63 +4,43 @@ pca_basis_experiment.py
 Weighted-PCA experiment harness and error-vs-bytes budget for the GALsPeCtrA
 spectral basis.
 
-The question this answers
-------------------------
-The committed basis stores 50 PCA coefficients per galaxy and reproduces L-GALAXIES
-broadband magnitudes to 0.01-0.03 mag. Two things about that number are unexamined:
+The committed basis stores 50 PCA coefficients per galaxy and reproduces
+L-GALAXIES broadband magnitudes to 0.01-0.03 mag. Two things about that are
+unexamined: (1) whether 50 is the right count and the current per-wavelength
+weighting the right one — colour-split validation found red galaxies
+reconstruct ~2x worse than blue (+0.026 mag in g), a statement about where
+in wavelength the basis spends its components, which weighting controls;
+(2) what a byte actually buys — 50 floats is a choice, not a constraint, so
+this builds the error-vs-storage curve to make that choice against a stated
+requirement rather than a variance threshold.
 
-1. **Is 50 the right count, and is the current weighting the right weighting?**
-   The incumbent basis was fitted on per-wavelength-standardised flux, and the
-   component count was never selected against an error budget. Colour-split
-   validation subsequently found a systematic, one-directional bias — red galaxies
-   are reconstructed ~2x worse than blue, +0.026 mag differential in *g* — which is
-   a statement about *where in wavelength* the basis is spending its components.
-   Weighting is the lever that moves that.
+**Component count is never selected from cumulative explained variance**: it
+measures agreement with the library's own dominant modes, not the magnitude
+error in any band a telescope has. They disagree badly here — 50 components
+explain >99.99% of variance while still leaving a measurable colour bias.
 
-2. **What is the price of a byte?** 50 floats is a choice, not a constraint. This
-   script produces the curve of reconstruction error against storage cost, so the
-   choice can be made against a stated requirement instead of a variance threshold.
+Measures: per-band error in mmag (PAUS 40 narrow bands, CFHT MegaCam ugriz,
+Euclid VIS+NISP YJH, 2MASS Ks, SDSS ugriz); fractional flux error by
+wavelength region; error vs SSP age/metallicity; the same propagated through
+real L-GALAXIES SFHs per galaxy; D4000 (direct and via Renard et al. 2022
+Eqs. 1-5 narrow-band reconstruction); bytes per galaxy (mass term included);
+the red-fraction shift at the calibrated colour cut.
 
-**Component count is never selected from a cumulative-variance fraction.** Explained
-variance measures agreement with the library's own dominant modes; it says nothing
-about the magnitude error in any band a telescope actually has. The two disagree
-badly here: 50 components explain >99.99 % of the variance while still leaving a
-measurable colour bias.
+Baselines: (a) the full spectrum at evaluation resolution (lossless,
+expensive); (b) a Shamshiri-style binned SFH at several bin counts;
+(c) broadband photometry alone, a single-SSP fit standing in for the
+spectrum; (d) the committed 50-component basis through the identical
+pipeline.
 
-What is measured
-----------------
-* per-band magnitude error in **mmag**, for PAUS's 40 narrow bands, CFHT MegaCam
-  ugriz, Euclid VIS + NISP YJH, 2MASS Ks and the SDSS ugriz L-GALAXIES itself uses
-* fractional flux error by rest-frame wavelength region
-* error as a function of SSP age and metallicity — which populations the basis fails
-* the same, per galaxy, propagated through real L-GALAXIES star-formation histories
-* D4000, both directly from the spectrum and via Renard et al. (2022) Eqs. 1-5 from
-  the PAUS narrow bands, at the redshifts where the break falls inside the filter set
-* bytes per galaxy, counting the total formed stellar mass as the extra number it is
-* the red-fraction shift at the calibrated colour cut — the acceptance criterion
-  inherited from the colour-split validation
-
-Baselines it is measured against
---------------------------------
-  (a) the full spectrum at the evaluation resolution — lossless, expensive
-  (b) a Shamshiri-style binned star-formation history at several bin counts
-  (c) broadband photometry alone, with a single-SSP fit standing in for the spectrum
-  (d) the committed 50-component basis, evaluated through the identical pipeline
-
-Usage
------
-  cd /path/to/GALsPeCtrA
+Usage:
   python scripts/pca_basis_experiment.py --config configs/pca_experiments/default.yaml
   python scripts/pca_basis_experiment.py --config ... --quick        # small scan, no galaxies
   python scripts/pca_basis_experiment.py --config ... --no-figures
 
-Outputs (under the configured output directory)
-  <name>_results.json        every number, machine-readable
-  <name>_error_vs_bytes.csv  the curve itself
-  figures/pca_basis/*.png    the figures
+Outputs (under the configured output directory): <name>_results.json (every
+number), <name>_error_vs_bytes.csv (the curve), figures/pca_basis/*.png.
 
-This script is offline analysis. It does not modify the frozen basis, any existing
-`data/` product, or the L-GALAXIES C code.
+Offline analysis only — modifies no frozen basis, data/ product, or C code.
 """
 
 from __future__ import annotations
@@ -252,8 +232,8 @@ def load_colour_cut(cfg):
         print(f"  colour cut   {path} not found; falling back to 0.4763")
         return 0.4763, "fallback"
     cal = json.loads(path.read_text())["calibrated"]
-    # The harness works on dust-free spectra, so the intrinsic calibration is the
-    # matching one. It differs from the dust cut by 0.0007 mag.
+    # harness works on dust-free spectra, so intrinsic is the matching
+    # calibration (differs from the dust cut by only 0.0007 mag)
     cut = float(cal["lgal_gmm_cut_intrinsic"])
     print(f"  colour cut   g-r >= {cut:.4f} (lgal_gmm, intrinsic) from {path.name}")
     return cut, "lgal_gmm_intrinsic"
@@ -282,19 +262,18 @@ def evaluate_reconstruction(label, bytes_per_gal, X_true, X_hat, wave_eval, band
                             n_components=None):
     """All metrics for one candidate representation of the SSP library.
 
-    `X_hat` is the library as this representation reproduces it, on the evaluation
-    grid. Everything downstream — galaxy spectra, colours, D4000 — follows from it by
-    linear operations, so a single (N_ssp, N_wave) array characterises the
-    representation completely.
+    X_hat is the library as this representation reproduces it, on the
+    evaluation grid. Everything downstream (galaxy spectra, colours, D4000)
+    follows from it by linear operations, so this one (N_ssp, N_wave) array
+    characterises the representation completely.
     """
     res = {"label": label, "bytes_per_galaxy": int(bytes_per_gal)}
     if n_components is not None:
         res["n_components"] = int(n_components)
 
-    # ── physicality: a truncated basis can reconstruct negative flux ──────
-    # This is not a rounding artefact. A low-N reconstruction genuinely goes
-    # negative in the faint UV, which makes the magnitude undefined rather than
-    # merely inaccurate, so it is counted separately from the error statistics.
+    # a truncated basis can reconstruct negative flux — not a rounding artefact,
+    # it genuinely goes negative in the faint UV, making the magnitude undefined
+    # rather than merely inaccurate, so it's counted separately
     neg = X_hat < 0
     res["physicality"] = {
         "frac_bins_negative": float(neg.mean()),
@@ -490,12 +469,12 @@ def baseline_full_spectrum(X_true, wave_eval, dtype=np.float32):
 
 
 def baseline_committed_basis(cfg, wave_eval, resample_M, wave_native):
-    """The committed 50-component basis, put through the identical pipeline.
+    """The committed basis, put through the identical pipeline.
 
-    It lives on the native 831-bin grid over 805-29950 Å, so it is reconstructed
-    there and then resampled onto the evaluation grid with the same flux-conserving
-    operator that produced the truth. Both sides therefore carry the identical
-    resampling, and the difference between them is the basis alone.
+    Lives on its own native grid; reconstructed there, then resampled onto
+    the evaluation grid with the same flux-conserving operator that produced
+    the truth — both sides carry identical resampling, so the difference is
+    the basis alone.
     """
     path = _resolve(cfg["baselines"]["committed_basis"])
     if not path.exists():
@@ -526,12 +505,11 @@ def baseline_committed_basis(cfg, wave_eval, resample_M, wave_native):
 def baseline_broadband_only(X_true, band_op, bb_bands, dtype=np.float32):
     """Broadband storage, quantified by the best single-SSP fit to those bands.
 
-    Five broadband magnitudes cannot reconstruct a spectrum on their own — the honest
-    statement is that this representation *has no spectrum*. To give it a number
-    rather than a shrug, each SSP is replaced by the library member whose broadband
-    colours match it best after optimal flux scaling, which is exactly the
-    single-population SED fit an analyst would do. It is a weak baseline by
-    construction; that is the point.
+    Five broadband magnitudes can't reconstruct a spectrum on their own — the
+    honest statement is that this representation has no spectrum. Each SSP is
+    replaced by the library member whose broadband colours match best after
+    optimal flux scaling (the single-population SED fit an analyst would do).
+    A weak baseline by construction; that's the point.
     """
     idx = [band_op.index(b) for b in bb_bands if b in band_op.names]
     if len(idx) < 3:
@@ -557,15 +535,14 @@ def baseline_broadband_only(X_true, band_op, bb_bands, dtype=np.float32):
 
 
 def baseline_binned_sfh(gal, index, n_bins, dtype=np.float32):
-    """Shamshiri-style storage: the star-formation history, coarsened to `n_bins`.
+    """Shamshiri-style storage: the SFH, coarsened to `n_bins`.
 
-    Returns a *galaxy-level* weight matrix rather than a library reconstruction,
-    because this representation does not approximate the library at all — it
-    approximates the history. Reconstruction is exact for every SSP and lossy only
-    where the coarsening merges populations of different age or metallicity.
+    Returns a galaxy-level weight matrix, not a library reconstruction —
+    this approximates the history, not the library. Exact for every SSP,
+    lossy only where coarsening merges different ages/metallicities.
 
-    Bytes: two numbers per bin (formed mass and mass-weighted metallicity), which is
-    half what L-GALAXIES itself stores, since it tracks disk and bulge separately.
+    Bytes: 2 numbers per bin (mass, mass-weighted Z) — half what L-GALAXIES
+    stores, since it tracks disk and bulge separately.
     """
     from galspectra.csp.ssp_weights import bilinear_weights
 
@@ -710,9 +687,9 @@ def main():
     cut, cut_name = load_colour_cut(cfg)
     gal = build_galaxy_weights(cfg, params, param_names)
 
-    # ── the resampling floor ──────────────────────────────────────────────
-    # Magnitudes computed on the native grid versus on the evaluation grid. No basis
-    # error below this is measurable, so it is reported before anything else.
+    # ── the resampling floor ──
+    # magnitudes on the native grid vs the evaluation grid — no basis error
+    # below this is measurable, so it's reported before anything else
     band_op_native = BandOperator(
         wave_native, load_filter_set(*cfg["photometry"]["sets"]),
         min_coverage=float(cfg["photometry"].get("min_coverage", 0.99)))
