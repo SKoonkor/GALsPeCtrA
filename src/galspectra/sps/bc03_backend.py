@@ -1,16 +1,11 @@
 """
 BC03 SSP backend.
 
-Reads Bruzual & Charlot 2003 FullSED files from the L-GALAXIES SpecPhotTables directory.
+Reads Bruzual & Charlot 2003 FullSED files from L-GALAXIES SpecPhotTables/.
+File format: age_yr, metallicity_Z, wavelength_Ang, flux (4 columns/row);
+221 ages x 1221 wavelengths per metallicity file, 6 files (Z = 0.0001-0.05).
 
-File format (4 columns per row):
-    age_yr   metallicity_Z   wavelength_Ang   flux
-
-221 age steps × 1221 wavelength points per metallicity file.
-6 metallicity files: Z = 0.0001, 0.0004, 0.004, 0.008, 0.02, 0.05
-
-Exposes the same (wave, flux) interface as fsps_backend.py so the two backends
-can be swapped transparently in generate_seds.py.
+Exposes the same (wave, flux) interface as fsps_backend.py for interchangeability.
 """
 
 from pathlib import Path
@@ -32,15 +27,10 @@ _BC03_FILENAMES = {
 
 
 class BC03Library:
-    """
-    Lazy-loading wrapper around the BC03 FullSED files.
+    """Lazy-loading wrapper around the BC03 FullSED files.
 
-    Parameters
-    ----------
-    bc03_dir : str or Path
-        Directory containing BC03_Chabrier_FullSED_m*.dat files.
-    wave_min, wave_max : float, optional
-        Wavelength range to load (Å). Reduces memory if set.
+    bc03_dir : directory with BC03_Chabrier_FullSED_m*.dat files.
+    wave_min, wave_max : wavelength range to load, Å (reduces memory if set).
     """
 
     def __init__(self, bc03_dir, wave_min=None, wave_max=None):
@@ -51,39 +41,31 @@ class BC03Library:
         self._wave = None  # shared wavelength grid
 
     def _load_metallicity(self, Z):
-        """
-        Load one BC03 FullSED file into a (N_age, N_wave) flux array.
+        """Load one BC03 FullSED file into a (N_age, N_wave) flux array.
 
-        The file is strictly regular: N_ages × N_waves_per_age rows, where
-        all rows for one age are contiguous.  We exploit this to avoid any
-        Python-level loops over 270 K rows.
+        The file is regular (N_ages blocks of N_waves_per_age contiguous
+        rows), exploited here to avoid a Python loop over ~270K rows.
         """
         fname = self.bc03_dir / _BC03_FILENAMES[Z]
         if not fname.exists():
             raise FileNotFoundError(f"BC03 file not found: {fname}")
 
-        # Fast read: numpy's C parser on the whole file
-        data = np.loadtxt(fname)            # (N_total, 4)
+        data = np.loadtxt(fname)  # (N_total, 4)
 
         ages_yr_col  = data[:, 0]
         waves_ang_col = data[:, 2]
         flux_col      = data[:, 3]
 
-        # Determine grid dimensions from first column changes (ages repeat in blocks)
-        # The file has N_waves rows per age block — find the first repeated age value
+        # rows per age block: find the first repeated age value
         n_waves_per_age = int(np.searchsorted(ages_yr_col[1:], ages_yr_col[0], side='right')) + 1
 
         n_total = len(data)
         n_ages  = n_total // n_waves_per_age
 
-        # Extract grids from the first block (ages from column 0 of each block start)
-        ages_yr   = ages_yr_col[::n_waves_per_age]          # (N_age,)
-        wave_full = waves_ang_col[:n_waves_per_age]          # (N_wave,)
-
-        # Reshape flux to (N_age, N_wave) — pure numpy, no Python loop
+        ages_yr   = ages_yr_col[::n_waves_per_age]   # (N_age,)
+        wave_full = waves_ang_col[:n_waves_per_age]  # (N_wave,)
         flux_grid = flux_col[:n_ages * n_waves_per_age].reshape(n_ages, n_waves_per_age)
 
-        # Apply wavelength mask
         wave_mask = np.ones(n_waves_per_age, dtype=bool)
         if self.wave_min is not None:
             wave_mask &= (wave_full >= self.wave_min)
@@ -117,29 +99,17 @@ def _nearest_Z(Z_query, Z_grid=BC03_METALLICITIES):
 
 
 def get_bc03_spectrum(tage_gyr, Z, bc03_dir, lib=None):
-    """
-    Interpolate BC03 SSP spectrum at a given age and metallicity.
+    """Interpolate a BC03 SSP spectrum at a given age and metallicity.
 
-    Parameters
-    ----------
-    tage_gyr : float
-        Stellar population age in Gyr.
-    Z : float
-        Metallicity (linear, e.g. 0.02 = solar). Clamped to BC03 grid range.
-    bc03_dir : str or Path
-        Path to directory with BC03_Chabrier_FullSED_*.dat files.
-    lib : BC03Library, optional
-        Pre-loaded library (avoids re-reading files on repeated calls).
+    tage_gyr : age in Gyr. Z : linear metallicity (0.02 = solar), clamped to
+    the BC03 grid. lib : pre-loaded BC03Library, optional.
 
-    Returns
-    -------
-    wave : (N_wave,) array — wavelength in Å
-    flux : (N_wave,) array — spectral flux (BC03 internal units; consistent within backend)
+    Returns (wave, flux) — Å and BC03-internal flux units.
     """
     if lib is None:
         lib = BC03Library(bc03_dir)
 
-    # Clamp metallicity to grid
+    # bracket Z between adjacent grid points
     Z_lo = BC03_METALLICITIES[np.searchsorted(BC03_METALLICITIES, Z, side='right') - 1]
     idx_hi = min(np.searchsorted(BC03_METALLICITIES, Z, side='right'),
                  len(BC03_METALLICITIES) - 1)
@@ -148,7 +118,6 @@ def get_bc03_spectrum(tage_gyr, Z, bc03_dir, lib=None):
     ages_lo, wave, flux_lo = lib.get(Z_lo)
     _, _, flux_hi          = lib.get(Z_hi)
 
-    # Interpolate in age for each metallicity bracket
     tage_clamped = np.clip(tage_gyr, ages_lo[0], ages_lo[-1])
 
     flux_at_Zlo = np.array([np.interp(tage_clamped, ages_lo, flux_lo[:, j])
@@ -156,7 +125,7 @@ def get_bc03_spectrum(tage_gyr, Z, bc03_dir, lib=None):
     flux_at_Zhi = np.array([np.interp(tage_clamped, ages_lo, flux_hi[:, j])
                              for j in range(len(wave))])
 
-    # Interpolate in metallicity (linear in log Z if both brackets differ)
+    # linear in log Z between brackets
     if Z_lo == Z_hi or Z_lo <= 0 or Z_hi <= 0:
         flux = flux_at_Zlo
     else:
@@ -168,25 +137,13 @@ def get_bc03_spectrum(tage_gyr, Z, bc03_dir, lib=None):
 
 
 def generate_bc03_seds(param_dict, bc03_dir, wave_min=None, wave_max=None, verbose=True, lib=None):
-    """
-    Generate BC03 SSP SEDs from a parameter grid.
+    """Generate BC03 SSP SEDs from a parameter grid.
 
-    Drop-in replacement for `generate_seds()` in `sed/generator.py` but uses
-    the BC03 FullSED files instead of FSPS.
+    Drop-in replacement for generate_seds() in sed/generator.py, BC03 instead
+    of FSPS. param_dict : from sampling/paramgrid.py, keys 'samples'/
+    'param_names' with 'tage' (linear Gyr) and 'logzsol' (log10 Z/Zsun).
 
-    Parameters
-    ----------
-    param_dict : dict
-        Output from sampling/paramgrid.py with keys 'samples' and 'param_names'.
-        Expected parameter names: 'tage' (linear Gyr, after ensure_linear_age conversion)
-        and 'logzsol' (log10 Z/Zsun).
-    bc03_dir : str or Path
-    wave_min, wave_max : float, optional — wavelength mask in Å.
-    verbose : bool
-
-    Returns
-    -------
-    dict with keys: 'wave', 'seds', 'params', 'param_names'
+    Returns dict: wave, seds, params, param_names.
     """
     samples     = param_dict["samples"]
     param_names = param_dict["param_names"]
@@ -198,16 +155,15 @@ def generate_bc03_seds(param_dict, bc03_dir, wave_min=None, wave_max=None, verbo
     if lib is None:
         lib = BC03Library(bc03_dir, wave_min=wave_min, wave_max=wave_max)
 
-    # Determine output wavelength grid from first sample
     row0 = samples[0]
-    tage0   = row0[tage_idx]                 # already linear Gyr (ensure_linear_age in paramgrid)
+    tage0   = row0[tage_idx]  # linear Gyr (ensure_linear_age already applied in paramgrid)
     Z0      = 0.02 * (10 ** row0[logzsol_idx])
     wave, _ = get_bc03_spectrum(tage0, Z0, bc03_dir, lib)
 
     seds = np.zeros((n_samples, len(wave)))
 
     for i, row in enumerate(samples):
-        tage_gyr = row[tage_idx]             # linear Gyr (ensure_linear_age already applied)
+        tage_gyr = row[tage_idx]
         Z        = 0.02 * (10 ** row[logzsol_idx])  # logzsol -> Z
 
         _, flux = get_bc03_spectrum(tage_gyr, Z, bc03_dir, lib)
