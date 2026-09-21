@@ -1,17 +1,6 @@
-"""Regression tests for the process_lgalaxies.py sample/output path guard.
-
-Background
-----------
-`scripts/process_lgalaxies.py` used to hard-code a **Millennium-II** sample path at
-module level while its default output filename was the **Millennium-I** one. Running
-it with defaults therefore overwrote `data/lgalaxies_sed_coeffs_bc03.npz` (Mil-I)
-with MRII coefficients, silently and with no error.
-
-These tests pin the fix:
-  * both `--sample` and `--output` are required, with no defaults
-  * an existing output is refused unless `--overwrite` is passed
-  * the sample and output filenames must refer to the same simulation
-"""
+"""process_lgalaxies.py: --sample/--output are required with no defaults, an
+existing output needs --overwrite, and the two filenames must name the same
+simulation."""
 
 import pytest
 
@@ -102,26 +91,7 @@ class TestRequiredArguments:
 
 
 class TestRegistryMustNotSupplyPaths:
-    """`galspectra.trees` must not be allowed to fill in --sample and --output.
-
-    The registry is consumed here for one thing only: the *expected* coefficient
-    filename, so `assert_same_simulation()` can state the bare-filename convention
-    once, as data.
-
-    It must never become a source of path defaults. The bug fixed in August 2026
-    was two independently-defaulted paths that named different simulations — a
-    Millennium-II sample beside a Millennium-I output — so a default run silently
-    overwrote the Millennium-I product. The fix was to delete the defaults and add
-    a cross-check.
-
-    A `--tree MR` flag that filled in both paths would undo that fix twice over.
-    It would restore an output default, so a run could again overwrite a product
-    nobody named; and it would **silence the cross-check**, because both paths
-    would come from the same `Tree` and would therefore agree by construction,
-    leaving `assert_same_simulation()` with nothing left to catch.
-
-    These tests exist so that change fails loudly rather than looking tidy.
-    """
+    """galspectra.trees must not be allowed to fill in --sample and --output."""
 
     def test_no_tree_flag(self, monkeypatch):
         monkeypatch.setattr(
@@ -138,20 +108,13 @@ class TestRegistryMustNotSupplyPaths:
             parse_args()
         help_text = capsys.readouterr().out
         assert "--tree" not in help_text, (
-            "process_lgalaxies.py grew a --tree option. If it supplies --sample and "
-            "--output together, assert_same_simulation() can no longer catch a "
-            "mismatch — the two paths would agree by construction. Read the class "
-            "docstring."
+            "a --tree flag would let the two paths agree by construction, "
+            "silencing assert_same_simulation()'s cross-check"
         )
         assert "--sample" in help_text and "--output" in help_text
 
     def test_sample_and_output_declare_no_default_in_source(self):
-        """Static pin on the two declarations, so a default cannot creep back.
-
-        Read from the source rather than from a parser instance: constructing the
-        parser to inspect it means monkeypatching argparse, and that is more
-        machinery than the invariant is worth.
-        """
+        """Static pin: --sample/--output stay required, with no default, in source."""
         import inspect
 
         import process_lgalaxies
@@ -180,8 +143,7 @@ class TestOverwriteGuard:
         existing = tmp_path / "lgalaxies_sed_coeffs_bc03.npz"
         existing.write_bytes(b"not really an npz")
 
-        # Mirror of the guard in main(). Kept in the test so the intent is pinned
-        # even if main() is refactored.
+        # mirrors the guard in main()
         assert existing.exists()
         overwrite = False
         with pytest.raises(FileExistsError):
