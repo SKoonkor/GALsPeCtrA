@@ -6,7 +6,6 @@ from galspectra.sps.fsps_backend import create_stellar_population
 from galspectra.sed.generator import generate_seds
 from galspectra.sed.io import save_sed_grid
 
-# Resolve project root
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT/"data"
 DATA_DIR.mkdir(exist_ok=True)

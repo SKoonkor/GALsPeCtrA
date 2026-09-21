@@ -70,8 +70,7 @@ def main():
     Z_grid       = BC03_METALLICITIES                     # [0.0001, 0.0004, 0.004, 0.008, 0.02, 0.05]
     logzsol_grid = np.log10(Z_grid / 0.02)                # [-2.301, -1.699, -0.699, -0.398, 0.000, 0.398]
 
-    # Age axis: log-spaced from 0.0001 to 13.7 Gyr, stored as LINEAR Gyr
-    # generate_bc03_seds reads these directly (no 10^ conversion)
+    # log-spaced 0.0001-13.7 Gyr, linear Gyr (generate_bc03_seds reads these directly, no 10^ conversion)
     age_axis    = np.logspace(np.log10(1e-4), np.log10(13.7), args.n_ages)
 
     # Build Cartesian product manually to avoid paramgrid's linear metallicity interpolation
