@@ -27,13 +27,3 @@ def create_stellar_population(**kwargs):
     defaults.update(kwargs)
 
     return fsps.StellarPopulation(**defaults)
-
-
-# # Test zone
-# fsps = get_fsps()
-# 
-# 
-# sp = create_stellar_population(compute_vega_mags = True)
-# print (sp)
-# 
-# wave, spec = sp.get_spectrum(tage=1.0)
