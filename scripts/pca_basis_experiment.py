@@ -471,10 +471,15 @@ def baseline_full_spectrum(X_true, wave_eval, dtype=np.float32):
 def baseline_committed_basis(cfg, wave_eval, resample_M, wave_native):
     """The committed basis, put through the identical pipeline.
 
-    Lives on its own native grid; reconstructed there, then resampled onto
-    the evaluation grid with the same flux-conserving operator that produced
-    the truth — both sides carry identical resampling, so the difference is
-    the basis alone.
+    Resampled onto the evaluation grid with the same flux-conserving operator
+    that produced the truth, unless the basis is already fit on that grid
+    (today's eval-grid-refit basis is) — then no resampling is applied, and
+    none would work: a grid's own centres are always narrower than its own
+    edges, so resampling data spanning only the centres onto edges built from
+    those same centres asks for coverage the data cannot supply. A basis on
+    the native grid instead reuses the already-computed native-to-eval
+    operator. Either way both sides carry identical resampling, so the
+    difference between them is the basis alone.
     """
     path = _resolve(cfg["baselines"]["committed_basis"])
     if not path.exists():
@@ -492,6 +497,8 @@ def baseline_committed_basis(cfg, wave_eval, resample_M, wave_native):
 
     if wave_c.size == wave_native.size and np.allclose(wave_c, wave_native):
         X_hat = recon @ resample_M.T
+    elif wave_c.size == wave_eval.size and np.allclose(wave_c, wave_eval):
+        X_hat = recon
     else:
         M_c = resampling_matrix(wave_c, _edges_from_centres(wave_eval))
         X_hat = recon @ M_c.T
