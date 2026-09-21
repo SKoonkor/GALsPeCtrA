@@ -4,46 +4,35 @@ photometry_convention_check.py
 Measures the filter convolution convention against L-GALAXIES' own photometric
 tables, over the full BC03 age x metallicity grid and all 40 bands the model ships.
 
-The question
-------------
-`documents/error_vs_bytes.md` §5 established that integrating the BC03 `FullSED`
-files gives a *g-r* that is redder than the `PhotTables` L-GALAXIES itself reads —
-from the same library, the same IMF and the same filter files. Roughly half of that
-looked like the filter convolution convention. This measures it properly.
+`documents/error_vs_bytes.md` §5 found the BC03 `FullSED` files integrate to a
+redder g-r than the `PhotTables` L-GALAXIES itself reads (same library, IMF,
+filter files) — roughly half of that looked like the convention:
 
     energy   <f_nu> = int f_nu T dnu / int T dnu        (what GALsPeCtrA does)
     photon   <f_nu> = int f_nu T dnu/nu / int T dnu/nu  (what a CCD does)
 
-Why the comparison is exact
----------------------------
-The `FullSED` files and the `PhotTables` are on the **same 221-point age grid**
-(verified to 1.2e-16 relative) and the same 6 metallicities, and
-`input/Filter_Names.txt` guarantees the same filter curves. So this is a direct,
-element-by-element comparison with **no interpolation anywhere**: every difference
-reported is a difference in how flux became a magnitude.
+The comparison is exact: FullSED and PhotTables share the same 221-point age
+grid (verified to 1.2e-16 relative) and 6 metallicities, and
+`input/Filter_Names.txt` guarantees the same filter curves — no interpolation
+anywhere, so every difference is a difference in how flux became a
+magnitude. Both conventions run through `galspectra.photometry.synthetic`,
+the production path.
 
-Both conventions run through `galspectra.photometry.synthetic`, the production
-path, so the measurement tests the code that would actually ship.
+Reports: (1) which convention reproduces the tables; (2) how the residual
+varies with age and metallicity; (3) whether what remains has the structure
+a BaSeL-vs-STELIB library difference would produce (ResearchPlan_2026 §9.3);
+(4) the quadrature ladder — added 7 Aug 2026 once the convention was settled
+and ~6 mmag remained with the STELIB hypothesis falsified: reading
+`setup_Spec_LumTables_onthefly()` (`code/model_spectro_photometric.c`) found
+three defects in its quadrature, not a library difference. The ladder
+switches them on one at a time and attributes the residual. See
+`documents/lgalaxies_quadrature.md`.
 
-What it reports
----------------
-1. Which convention reproduces the tables, under the single best zero point.
-2. How the residual varies with age and with metallicity.
-3. Whether what remains has the structure a BaSeL-vs-STELIB library difference
-   would produce — the hypothesis in ResearchPlan_2026 §9.3.
-4. **The quadrature ladder**, added 7 Aug 2026. Once the convention was settled, a
-   residual of ~6 mmag remained and the STELIB explanation had failed its own
-   discriminating test. Reading the code that *writes* the tables —
-   `setup_Spec_LumTables_onthefly()` in `code/model_spectro_photometric.c` — showed
-   it is not a library difference at all but three defects in that routine's
-   quadrature. The ladder switches them on one at a time and reports how much of the
-   residual each owns. See `documents/lgalaxies_quadrature.md`.
-
-This script only measures. It changes no product; the ladder's `lgal_native` mode is
-a diagnostic and must never be used for science. See `documents/filter_convention.md`.
+This script only measures — it changes no product. The ladder's
+`lgal_native` mode is a diagnostic and must never be used for science. See
+`documents/filter_convention.md`.
 
 Usage
-  cd /path/to/GALsPeCtrA
   python scripts/photometry_convention_check.py
   python scripts/photometry_convention_check.py --no-figures
 """
@@ -95,14 +84,11 @@ AGE_EDGES_GYR = np.array([0.0, 0.01, 0.1, 0.5, 1.0, 3.0, 6.0, 10.0, 20.001])
 def load_band_registry():
     """Every band with both a filter curve and a Millennium-I photometric table.
 
-    Driven by `input/Filter_Names.txt`, the mapping L-GALAXIES itself reads, so
-    the curve used here is the curve the tables were built from.
-
-    Using all 40 bands rather than SDSS ugriz alone is what makes the
-    wavelength-structure test possible: every SDSS pivot falls **inside** STELIB's
-    3200-9500 Å empirical range, so ugriz on its own cannot distinguish "the
-    residual lives where the empirical library lives" from "the residual is
-    everywhere". GALEX FUV at ~1500 Å and IRAC at 8 µm can.
+    Driven by `input/Filter_Names.txt`, so the curve used here is the curve
+    the tables were built from. All 40 bands, not just SDSS ugriz, because
+    every SDSS pivot falls inside STELIB's 3200-9500 Å range — ugriz alone
+    can't tell "residual lives where the empirical library lives" from
+    "residual is everywhere". GALEX FUV (~1500 Å) and IRAC (8 µm) can.
     """
     bands = {}
     for raw in FILTER_LIST.read_text().splitlines()[1:]:
@@ -185,13 +171,12 @@ def measure(registry):
 
 
 #: The quadrature ladder: each step adds one defect of L-GALAXIES' own integration.
-#: `None` means the production path (the adopted photon convention) — the baseline the
-#: residual is measured down from.
+#: None means the production path (adopted photon convention) — the baseline.
 #:
-#: The order matters. The measure comes first because it is the largest single term;
-#: the step size second because it only bites once the measure is wrong; the filter
-#: sampling last. They are **not independent** — see `photon + no step size`, a control
-#: that shows the missing step size on its own makes the agreement slightly *worse*.
+#: Order matters: measure first (largest term), step size second (only bites
+#: once the measure is wrong), filter sampling last. Not independent — see
+#: `photon + no step size`, a control showing the missing step size alone
+#: makes agreement slightly *worse*.
 QUADRATURE_LADDER = (
     ("photon (production)", None),
     ("+ dlambda measure",
@@ -208,9 +193,9 @@ QUADRATURE_LADDER = (
 def quadrature_ladder(data, registry):
     """How much of the post-convention residual each C defect owns.
 
-    Evaluated through `lgal_band_matrix`, which is the same quadrature expressed as a
-    matrix — L-GALAXIES' integral is still linear in f_lambda, so 221 x 6 x 40
-    magnitudes are one matrix product per step rather than 53,000 Python loops.
+    Evaluated through `lgal_band_matrix` (the same quadrature as a matrix —
+    linear in f_λ, so 221x6x40 magnitudes is one matrix product per step,
+    not 53,000 Python loops).
     """
     filters = {tok: info["curve"] for tok, info in registry.items()}
     lib = BC03Library(FULLSED_DIR)
@@ -244,8 +229,7 @@ def quadrature_ladder(data, registry):
         mag = np.concatenate(per_step[name], axis=0)
         ok = np.isfinite(mag) & np.isfinite(tab)
         delta = mag - tab
-        # One global zero point, exactly as the convention comparison does: the two
-        # products carry different flux units and that is one constant.
+        # one global zero point (two products, different flux units, one constant)
         resid = np.abs(delta - np.nanmedian(delta[ok]))
         s = resid[:, sdss][ok[:, sdss]]
         a = resid[ok]
@@ -276,9 +260,9 @@ def quadrature_ladder(data, registry):
 def duplicate_wavelength_audit(registry):
     """Filter curves with a repeated wavelength, which breaks the C's bisection.
 
-    `locate()` (`model_misc.c:3923`) is a bisection and assumes a strictly monotonic
-    array. Half of the shipped curves are not, and that is what separates the bands
-    whose residual the ladder closes from those it does not.
+    `locate()` (model_misc.c:3923) assumes a strictly monotonic array; half
+    the shipped curves aren't, separating bands the ladder closes from those
+    it doesn't.
     """
     out = {}
     for tok, info in registry.items():
@@ -312,9 +296,8 @@ def analyse(data, registry, min_age_gyr=0.001):
         delta = mine - tab
         delta[:, ~usable, :] = np.nan
 
-        # One global zero point: the two products carry different flux units, and
-        # that is a single constant. Whatever survives removing it is a genuine
-        # disagreement about the shape of the spectrum.
+        # one global zero point (different flux units); whatever survives is a
+        # genuine disagreement about the shape of the spectrum
         zp = float(np.nanmedian(delta))
         resid = delta - zp
 
