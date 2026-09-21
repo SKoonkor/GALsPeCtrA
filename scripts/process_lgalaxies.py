@@ -14,13 +14,27 @@ Outputs:
   data/lgalaxies_sed_coeffs_<backend>.npz
 
   Keys: pca_coeffs, galaxy_index, backend, n_components, failed_ids,
+        simulation, sample_file, convention,
         synth_mag_{u,g,r,i,z}      — intrinsic (dust-free) absolute AB magnitudes
         synth_magdust_{u,g,r,i,z}  — dust-attenuated absolute AB magnitudes
 
+  `convention` records how the spectra were convolved with the filters: 'photon'
+  (the default since 7 Aug 2026, and what a CCD measures) or 'energy'. It is stored
+  because a magnitude is not fully specified without it.
+
 Usage:
   cd /path/to/GALsPeCtrA
-  python scripts/process_lgalaxies.py [--backend fsps|bc03] [--n-gals N] [--no-dust]
-  python scripts/process_lgalaxies.py --add-nebular      # include nebular emission
+  python scripts/process_lgalaxies.py \
+      --sample "$LGAL/output/samples/Planck_Mil-I_snapshots_default_test3_z0.00-0.00_All.npy" \
+      --output data/lgalaxies_sed_coeffs_bc03.npz \
+      --backend bc03
+
+  # add nebular emission
+  python scripts/process_lgalaxies.py --sample ... --output ... --add-nebular
+
+--sample and --output are both REQUIRED and have no defaults. The script refuses to
+overwrite an existing output unless --overwrite is given, and refuses to run if the
+sample and output filenames refer to different simulations (Millennium-I vs -II).
 
 Requirements:
   - PCA results file must exist (run run_pca.py first)
@@ -28,8 +42,12 @@ Requirements:
 """
 
 import argparse
+import re
 from pathlib import Path
 import numpy as np
+
+from galspectra.trees import LABELS, get_tree
+from galspectra.photometry.synthetic import CONVENTIONS, DEFAULT_CONVENTION
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Path configuration
@@ -37,9 +55,103 @@ import numpy as np
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 LGAL_ROOT    = PROJECT_ROOT.parent / "L-GALAXIES" / "LGalaxies2020_PublicRepository-master"
 
-SAMPLE_FILE = LGAL_ROOT / "output/samples/Planck_Mil-II_snapshots_default_test1_z0.00-0.00_All.npy"
 SFH_FITS    = LGAL_ROOT / "AuxCode/Python/Database_SFH_table.fits"
 FILTER_DIR  = LGAL_ROOT / "SpecPhotTables/Filters"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Simulation-consistency guard
+#
+# There is no default sample path and no default output path. Previously this
+# module hard-coded a Millennium-II sample while the default output filename was
+# the Millennium-I one, so a default run silently overwrote the Mil-I product
+# with MRII coefficients. Both are now required arguments and are cross-checked.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Order matters: MRII must be tested before MR, because "Mil-I" is a prefix of
+# "Mil-II". The negative lookahead stops the MR pattern matching inside an MRII name.
+_SIM_PATTERNS = (
+    ("MRII", re.compile(r"(?:Mil[-_]?II|MRII|Mil[-_]?2)(?![I0-9])", re.IGNORECASE)),
+    ("MR",   re.compile(r"(?:Mil[-_]?I|MRI?|Mil[-_]?1)(?![I0-9])",  re.IGNORECASE)),
+)
+
+
+def detect_simulation(path):
+    """Return 'MR', 'MRII', or None from a filename. None means 'no token found'."""
+    name = Path(path).name
+    for label, pattern in _SIM_PATTERNS:
+        if pattern.search(name):
+            return label
+    return None
+
+
+def _unlabelled_output_simulation():
+    """Which simulation a *bare* output filename means, derived from the registry.
+
+    The convention used to be stated in prose here: "a bare
+    'lgalaxies_sed_coeffs_bc03.npz' means Millennium-I". That was the same fact
+    the tree registry already carries as data, written down twice — so it could
+    drift. Now it is read from `galspectra.trees`: whichever tree's canonical
+    coefficient filename carries no simulation token is the one a bare name
+    refers to. Rename that product in the registry and this follows.
+
+    Raises if the registry stops making the convention unambiguous, which is the
+    right moment to notice.
+    """
+    unlabelled = [lbl for lbl in LABELS
+                  if detect_simulation(get_tree(lbl).coeffs_name) is None]
+    if len(unlabelled) != 1:
+        raise RuntimeError(
+            "the bare-output-filename convention is ambiguous: "
+            f"{len(unlabelled)} tree(s) in galspectra.trees have a coefficient "
+            f"filename with no simulation token ({unlabelled or 'none'}). "
+            "Exactly one is required for an unlabelled --output to be resolvable."
+        )
+    return unlabelled[0]
+
+
+def assert_same_simulation(sample_path, output_path, override=None):
+    """Refuse to write MRII coefficients into a Millennium-I output file (or vice versa).
+
+    Returns the resolved simulation label.
+
+    Rules:
+      - the sample must carry a recognisable simulation token, or --simulation must be given
+      - if the output carries a token too, the two must agree
+      - an unlabelled output is accepted only for the simulation whose canonical
+        coefficient filename is itself unlabelled — read from `galspectra.trees`
+        via `_unlabelled_output_simulation()`, not restated here
+    """
+    sample_sim = override or detect_simulation(sample_path)
+    if sample_sim is None:
+        raise ValueError(
+            f"Cannot tell which simulation this sample is from:\n"
+            f"  {sample_path}\n"
+            f"Expected the filename to contain 'Mil-I'/'MR' or 'Mil-II'/'MRII'.\n"
+            f"Pass --simulation MR or --simulation MRII to state it explicitly."
+        )
+
+    output_sim = detect_simulation(output_path)
+
+    if output_sim is not None and output_sim != sample_sim:
+        raise ValueError(
+            f"Simulation mismatch between sample and output:\n"
+            f"  sample -> {sample_sim}:  {sample_path}\n"
+            f"  output -> {output_sim}:  {output_path}\n"
+            f"Writing this would corrupt the {output_sim} product with {sample_sim} coefficients."
+        )
+
+    bare_means = _unlabelled_output_simulation()
+    if output_sim is None and sample_sim != bare_means:
+        raise ValueError(
+            f"Refusing to write a {sample_sim} sample to an unlabelled output filename:\n"
+            f"  sample -> {sample_sim}:  {sample_path}\n"
+            f"  output -> (no simulation token):  {output_path}\n"
+            f"A bare filename means {bare_means} "
+            f"({get_tree(bare_means).coeffs_name}). Rename the output to include "
+            f"'{sample_sim}', e.g. '..._{sample_sim}.npz'."
+        )
+
+    return sample_sim
 
 # Reference distance for absolute magnitudes (10 pc in cm)
 _D_10PC_CM       = 3.0857e19
@@ -52,12 +164,25 @@ _YOUNG_THRESHOLD_GYR = 0.010   # 10 Myr
 
 def parse_args():
     p = argparse.ArgumentParser(description="Batch SED processing for L-GALAXIES output")
+    p.add_argument("--sample",  required=True,
+                   help="Path to the pre-processed L-GALAXIES sample .npy (REQUIRED, no default)")
+    p.add_argument("--output",  required=True,
+                   help="Path to the output .npz (REQUIRED, no default)")
+    p.add_argument("--overwrite", action="store_true",
+                   help="Permit overwriting an existing output file")
+    p.add_argument("--simulation", choices=["MR", "MRII"], default=None,
+                   help="State the simulation explicitly when the filenames do not say")
     p.add_argument("--backend", choices=["fsps", "bc03"], default="fsps")
     p.add_argument("--pca-file", default=None)
     p.add_argument("--n-gals",  type=int, default=None,
                    help="Process only the first N galaxies (for testing)")
-    p.add_argument("--output",  default=None)
     p.add_argument("--filters", nargs="+", default=["u", "g", "r", "i", "z"])
+    # The convention is recorded in the output file, so a product always states
+    # which one made it. It is a photometry choice and touches no path, so unlike
+    # --sample/--output it can carry a default without weakening any cross-check.
+    p.add_argument("--convention", choices=list(CONVENTIONS), default=DEFAULT_CONVENTION,
+                   help=f"Filter convolution convention (default {DEFAULT_CONVENTION!r}). "
+                        "'energy' reproduces products written before 7 Aug 2026")
     p.add_argument("--no-photometry", action="store_true")
     p.add_argument("--no-dust",       action="store_true",
                    help="Skip dust attenuation (compute intrinsic magnitudes only)")
@@ -65,6 +190,13 @@ def parse_args():
                    help="Add nebular emission lines + continuum (requires data/qh0_grid_bc03.npz)")
     p.add_argument("--f-ion",         type=float, default=1.0,
                    help="Ionizing photon absorption fraction, 0–1 (default 1.0 = no escape)")
+    # Dust only. The ISM column density carries n_H ∝ (1+z)^-1, exactly as
+    # code/post_process_spec_mags.c:417 does, so a sample away from z = 0 processed at z = 0 gets
+    # systematically too much attenuation. Defaults to the sample's own snapshot
+    # redshift, which is the answer in every case except a deliberate experiment.
+    p.add_argument("--redshift", type=float, default=None,
+                   help="Galaxy redshift for the dust column density "
+                        "(default: the Planck redshift of the sample's SnapNum)")
     return p.parse_args()
 
 
@@ -88,10 +220,20 @@ def main():
             "pca_results_fsps_v2.npz" if args.backend == "fsps"
             else "pca_results_bc03.npz"
         )
-    _neb_suffix = "_nebular" if args.add_nebular else ""
-    output_file = Path(args.output) if args.output else (
-        PROJECT_ROOT / "data" / f"lgalaxies_sed_coeffs_{args.backend}{_neb_suffix}.npz"
-    )
+    sample_file = Path(args.sample)
+    output_file = Path(args.output)
+
+    if not sample_file.exists():
+        raise FileNotFoundError(f"Sample file not found: {sample_file}")
+
+    simulation = assert_same_simulation(sample_file, output_file, override=args.simulation)
+    print(f"Simulation: {simulation}")
+
+    if output_file.exists() and not args.overwrite:
+        raise FileExistsError(
+            f"Output already exists: {output_file}\n"
+            f"Pass --overwrite to replace it, or choose a different --output."
+        )
 
     # ── Load PCA ─────────────────────────────────────────────────────────────
     print(f"Loading PCA from {pca_file}")
@@ -120,13 +262,34 @@ def main():
     print(f"  Interpolator: {len(ages_grid)} ages × {len(Z_grid)} metallicities")
 
     # ── Load sample ──────────────────────────────────────────────────────────
-    print(f"\nLoading galaxy sample from {SAMPLE_FILE}")
+    print(f"\nLoading galaxy sample from {sample_file}")
     from galspectra.lgalaxies import load_sample, load_sfh_table, extract_sfh
-    G         = load_sample(SAMPLE_FILE)
+    G         = load_sample(sample_file)
     sfh_table = load_sfh_table(SFH_FITS)
     N_total   = len(G)
     N_proc    = min(args.n_gals or N_total, N_total)
     print(f"  {N_total:,} galaxies loaded; processing {N_proc:,}")
+
+    # ── Redshift for the dust model ──────────────────────────────────────────
+    # Note the asymmetry, and do not "tidy" it: dust uses the **Planck** redshift the
+    # galaxies were evolved on, because that is the one code/post_process_spec_mags.c:417 uses,
+    # while redshifting a spectrum for comparison against ObsMag uses the **WMAP7**
+    # one the photometric tables were tabulated on. See
+    # galspectra.lgalaxies.snapshots for why the two differ.
+    dust_redshift = args.redshift
+    if dust_redshift is None:
+        from galspectra.lgalaxies import snapshot
+        snapnums = np.unique(G["SnapNum"])
+        if len(snapnums) != 1:
+            raise ValueError(
+                f"sample spans {len(snapnums)} snapshots {list(snapnums)}; it has no "
+                "single redshift. Pass --redshift explicitly."
+            )
+        snap = snapshot(LGAL_ROOT, int(snapnums[0]))
+        dust_redshift = snap.z_planck
+        print(f"  Snapshot {snap.snap}: dust redshift z = {dust_redshift:.4f} (Planck)")
+    else:
+        print(f"  Dust redshift z = {dust_redshift:.4f} (from --redshift)")
 
     # ── Load filters ─────────────────────────────────────────────────────────
     filters = {}
@@ -235,7 +398,8 @@ def main():
                 sed_neb_bulge = _neb_b / _FOUR_PI_10PC_SQ
                 sed_intrinsic = sed_intrinsic + sed_neb_disk + sed_neb_bulge
 
-            mags = compute_ab_magnitudes(pca_wave, sed_intrinsic, filters)
+            mags = compute_ab_magnitudes(pca_wave, sed_intrinsic, filters,
+                                         convention=args.convention)
             for name, m in mags.items():
                 all_synth_mags[name][i] = m
 
@@ -282,12 +446,13 @@ def main():
                     float(G[i]["ColdGasRadius"]),
                     G[i]["MetalsColdGas"],
                     float(G[i]["CosInclination"]),
-                    redshift=0.0,
+                    redshift=dust_redshift,
                     hubble_h=0.673,
                     rng=rng,
                 )
 
-                dust_mags = compute_ab_magnitudes(pca_wave, sed_dust, filters)
+                dust_mags = compute_ab_magnitudes(pca_wave, sed_dust, filters,
+                                                  convention=args.convention)
                 for name, m in dust_mags.items():
                     all_dust_mags[name][i] = m
 
@@ -307,6 +472,20 @@ def main():
         "failed_ids":   np.array(failed_ids, dtype=np.int32),
         "add_nebular":  np.array(args.add_nebular),
         "f_ion":        np.array(args.f_ion),
+        # Provenance: makes the product self-describing, so a consumer never has
+        # to infer the simulation from the filename.
+        "simulation":   np.array(simulation),
+        "sample_file":  np.array(str(sample_file)),
+        # The redshift the dust column density was computed at. A product built at the
+        # wrong one is indistinguishable from a right one by inspection, so it is
+        # recorded rather than inferred from the sample filename.
+        "dust_redshift": np.array(dust_redshift),
+        # Which filter convolution convention produced synth_mag_*/synth_magdust_*.
+        # Not knowing this about two BC03 products in the same distribution is what
+        # cost this project a mis-attributed colour bias — see
+        # documents/filter_convention.md. A magnitude without its convention is
+        # incomplete, so every product now carries it.
+        "convention":   np.array(args.convention),
     }
     for name, arr in all_synth_mags.items():
         save_dict[f"synth_mag_{name}"] = arr
