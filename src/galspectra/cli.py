@@ -16,7 +16,6 @@ def main():
 
     subparsers = parser.add_subparsers(dest="command")
 
-    # generate command
     gen = subparsers.add_parser("generate", help="Generate SED grid")
 
     gen.add_argument("--config", type=str, help="Path to YAML config file")
@@ -40,8 +39,6 @@ def main():
 
 
 def run_generate(args):
-
-    # Resolve project root
     PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
     if args.config:
@@ -65,16 +62,13 @@ def run_generate(args):
 
     print (f"Generated {len(param_dict['samples'])} samples")
 
-    # FSPS
     fsps_cfg = config.get("fsps", {})
 
     sp = create_stellar_population(logzsol=args.logzsol)
     print ("FSPS initialised")
 
-    # Generate SEDs
     sed_data = generate_seds(param_dict, sp)
 
-    # Save SEDs
     OUTPUT_FILE = config["output"]["file"]
     OUTPUT_PATH = PROJECT_ROOT/OUTPUT_FILE
 
