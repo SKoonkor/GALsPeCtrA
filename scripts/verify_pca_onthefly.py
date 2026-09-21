@@ -68,16 +68,11 @@ def main():
         raise FileNotFoundError(f"Post-processing output not found: {POSTPROC_FILE}\n"
                                 "Run: python scripts/process_lgalaxies.py --backend bc03")
 
-    # ── match galaxies by applying the same selection as the sample ──────
-    # Both binary and sample come from the same tree file (same model run,
-    # deterministic), so galaxies appear in the same order.  The sample is
-    # the subset passing:
-    #   StellarMass (Msun) >= 1e9  AND  Mvir_raw * 1e10 >= DM_part * part_res
-    # where DM_part = 0.0961104e10 Msun/h (Mil-I particle mass), part_res = 20.
-    #
-    # We filter the binary with the same cuts; the resulting ordered list
-    # should be identical to the sample.  We then match row-by-row using
-    # StellarMass as a float32 exact-match guard.
+    # Binary and sample come from the same deterministic run, so galaxies
+    # appear in the same order. Sample = binary filtered by StellarMass(Msun)
+    # >= 1e9 AND Mvir_raw*1e10 >= DM_part*part_res (DM_part=0.0961104e10
+    # Msun/h, Mil-I; part_res=20). Filter the binary the same way, then match
+    # row-by-row using StellarMass as a float32 exact-match guard.
 
     if not SAMPLE_FILE.exists():
         raise FileNotFoundError(f"Sample file not found: {SAMPLE_FILE}")
@@ -96,11 +91,10 @@ def main():
     gals_sel = gals[mvir_ok & sm_ok]
     print(f"Binary after selection: {len(gals_sel):,}")
 
-    # Ordered scan with one-step lookahead.
-    # Both lists are in the same galaxy order; the only difference is ≤ a few
-    # extra galaxies in one or the other at Mvir-cut boundaries.  When there's
-    # a mismatch we check one step ahead in each list to decide which side has
-    # the extra entry, then advance that pointer to re-sync.
+    # Ordered scan with one-step lookahead: both lists share galaxy order,
+    # differing by at most a few extra entries at Mvir-cut boundaries. On a
+    # mismatch, check one step ahead in each list to find which side has the
+    # extra entry, and advance that pointer to re-sync.
     matched_otf = []
     matched_pp  = []
     otf_sel     = otf[mvir_ok & sm_ok]
@@ -144,9 +138,7 @@ def main():
         print(f"  PC{k+1:02d}: r = {pearson_r[k]:.6f}")
     print(f"  ...  median r = {np.median(pearson_r):.6f}  min r = {np.min(pearson_r):.6f}")
 
-    # ── normalise by total mass (removes overall scale factor) ────────────
-    # In-code (output-time) coefficients are mass-weighted sums; post-proc are the same.
-    # Normalise each galaxy's coefficients by its L1-norm across PCs.
+    # normalise by mass (removes overall scale factor) — both are mass-weighted sums
     def safe_normalise(arr):
         norm = np.linalg.norm(arr, axis=1, keepdims=True)
         norm = np.where(norm == 0, 1.0, norm)

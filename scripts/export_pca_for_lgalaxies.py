@@ -70,7 +70,6 @@ def main():
     print(f"  Age range: {ages_unique[0]:.4f} – {ages_unique[-1]:.4f} Gyr")
     print(f"  logzsol range: {logzsol_unique[0]:.4f} – {logzsol_unique[-1]:.4f}")
 
-    # Determine output path
     if args.out is not None:
         out_path = Path(args.out)
     else:
@@ -78,7 +77,6 @@ def main():
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Write binary file
     with open(out_path, "wb") as f:
         # Header: three int32s
         f.write(struct.pack("iii", N_AGE, N_Z, N_PC))
