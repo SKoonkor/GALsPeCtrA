@@ -1,20 +1,4 @@
-"""The redshift-tag half of `galspectra.trees`, and the snapshot mapping behind it.
-
-Why this suite exists
----------------------
-Before the multi-redshift run there was exactly one sample, one coefficient product and
-one binary per tree, and `trees.py` stored their names as plain strings. Adding nine more
-output redshifts meant those names had to become a function of the redshift, and the first
-attempt got two things wrong that no existing test could have caught:
-
-* it rewrote `z0.00-0.00` to `z0.26-0.00`, because the sample name carries the tag *twice*
-  and a plain substring replace moved only the first half;
-* it made `coeffs_path(d, "0.00")` differ from `coeffs_path(d)`, so both callers had to
-  carry a `None if tag == "0.00" else tag` special case.
-
-Both are pinned below. The second is the more important one: it is not a crash, it is two
-call sites quietly disagreeing about which file z = 0 lives in.
-"""
+"""The redshift-tag half of `galspectra.trees`, and the snapshot mapping behind it."""
 
 from __future__ import annotations
 
@@ -96,12 +80,7 @@ class TestTagOfSample:
         assert tree.tag_of_sample(tree.sample_path(ROOT, tag)) == tag
 
     def test_the_other_tree_is_not_claimed(self):
-        """A Millennium-II sample must not yield a tag a Millennium-I path is built from.
-
-        `discover_tags` globs one directory. If this returned a tag, a run with both
-        trees' samples side by side would silently build Millennium-I paths from
-        Millennium-II files.
-        """
+        """A Millennium-II sample must not yield a tag Millennium-I claims."""
         mr, mrii = get_tree("MR"), get_tree("MRII")
         assert mr.tag_of_sample(mrii.sample_path(ROOT, "1.04")) is None
         assert mrii.tag_of_sample(mr.sample_path(ROOT, "1.04")) is None
@@ -109,12 +88,7 @@ class TestTagOfSample:
     @pytest.mark.parametrize("name", ["SFH_Bins", "notes.txt", "",
                                       "Planck_Mil-I_snapshots_default_test3_z1.04-2.07_All.npy"])
     def test_a_name_that_is_not_a_sample_returns_none(self, name):
-        """The last case is the interesting one: a *range* this code never produced.
-
-        `main_lgals.py` builds `z<first>-<last>` from its redshift list, so the two halves
-        are equal for every sample the pipeline writes. A file with unequal halves came
-        from somewhere else and has no single redshift to report.
-        """
+        """A multi-redshift range (unequal z<first>-<last> halves) returns None."""
         assert get_tree("MR").tag_of_sample(name) is None
 
 
@@ -142,11 +116,7 @@ class TestSnapshotMapping:
         assert all(snapshot(LGAL_ROOT, s).z_phot >= 0.0 for s in range(64))
 
     def test_the_two_grids_really_do_differ(self):
-        """If these ever agree, `z_phot` has stopped being a separate quantity.
-
-        The gap is the whole reason `snapshots.py` exists. Planck-rescaled photometric
-        tables would close it, and this test is where that change announces itself.
-        """
+        """z_planck and z_phot differ by more than 0.1 at every mid-range snapshot."""
         for snap in (25, 30, 38, 45, 50):
             s = snapshot(LGAL_ROOT, snap)
             assert s.z_planck - s.z_phot > 0.1
@@ -184,13 +154,7 @@ class TestSnapshotMapping:
 
 
 class TestFileNumbers:
-    """`file_numbers()` and `output_paths()` must stay the same list, in the same order.
-
-    Notebook 09 zipped `BINARY_FILES` against a `_file_nrs` name that the refactor to this
-    registry had deleted, so cell 7 raised `NameError` and the nine cells below it died as
-    cascading `NameError`s. Splitting the numbers out of `output_paths` fixed it; these
-    tests pin that the split did not let the two drift.
-    """
+    """file_numbers() and output_paths() stay the same list, in the same order."""
 
     @pytest.mark.parametrize("label", LABELS)
     def test_none_means_the_whole_range(self, label):
