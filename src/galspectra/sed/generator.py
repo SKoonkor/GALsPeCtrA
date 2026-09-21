@@ -1,33 +1,12 @@
 import numpy as np
 
 def generate_seds(param_dict, sp, verbose=True):
-    """
-    Generate SEDs from a parameter grid.
+    """Generate SEDs from a parameter grid.
 
-    Parameters
-    ----------
-    param_dict : dict
-        Output from sampling/paramgrid.py:
-        {
-            "samples": (N, P) array,
-            "param_names": list of str
-        }
+    param_dict : from sampling/paramgrid.py, {"samples": (N,P), "param_names": [...]}.
+    sp : pre-initialized fsps.StellarPopulation.
 
-    sp : fsps.StellarPopulation
-        Pre-initialized FSPS object
-
-    verbose : bool
-        Print progress
-
-    Returns
-    -------
-    dict 
-        {
-            "wave", (N_wave,),
-            "seds": (N_samples, N_wave),
-            "params": (N_samples, N_params),
-            "param_names": list
-        }
+    Returns dict: wave (N_wave,), seds (N,N_wave), params (N,P), param_names.
     """
 
     samples = param_dict["samples"]
@@ -40,12 +19,10 @@ def generate_seds(param_dict, sp, verbose=True):
     for i in range(n_samples):
         params = dict(zip(param_names, samples[i]))
 
-        # Update FSPS parameters
         for key, val in params.items():
             if key != "tage":
                 sp.params[key] = val
 
-        # Generate spectrum
         wave, sed = sp.get_spectrum(
                 tage = params.get("tage", 1.0),
                 peraa = True,
