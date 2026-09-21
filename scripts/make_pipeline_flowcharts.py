@@ -1,32 +1,23 @@
 """Draw how a spectrum is computed *inside* the L-GALAXIES executable.
 
 Produces `documents/incode_spectra_flowcharts.pdf`, three landscape pages:
+1. L-GALAXIES' own photometry -> Mag/MagDust/ObsMag; 2. the GALsPeCtrA
+in-code PCA -> pca_coeffs[50]; 3. the two side by side.
 
-    1. L-GALAXIES' own photometry  ->  Mag / MagDust / ObsMag
-    2. The GALsPeCtrA in-code PCA  ->  pca_coeffs[50]
-    3. The two side by side, with the places they diverge
-
-Scope
------
-Only what runs in the C executable. Fitting the PCA basis is a separate story and is
-notebook 02's subject; this chart starts from the basis already existing on disk.
-
-Why every box carries a file:line
----------------------------------
-So the chart can be checked against the source, and so it fails loudly rather than
-quietly when the code moves. Every reference here was verified against the tree at
-`../L-GALAXIES/LGalaxies2020_PublicRepository-master` for a build with
+Only what runs in the C executable — fitting the PCA basis is notebook 02's
+subject, and this chart starts from the basis already existing on disk.
+Every file:line was verified against the tree at
+`../L-GALAXIES/LGalaxies2020_PublicRepository-master`, built with
 COMPUTE_SPECPHOT_PROPERTIES, POST_PROCESS_MAGS, COMP_PCA_COEFFICIENTS,
-DETAILED_METALS_AND_MASS_RETURN and BC03 on, FULL_SPECTRA and ICL off.
+DETAILED_METALS_AND_MASS_RETURN and BC03 on, FULL_SPECTRA and ICL off — so
+the chart can be checked against source and fails loudly if the code moves.
 
-The framing matters and is easy to get wrong: **neither path is an "on-the-fly SED".**
-Nothing spectral is simulation state -- `pca_coeffs` lives in `struct GALAXY_OUTPUT` and
-not in the runtime `struct GALAXY` -- and both paths run at snapshot-output time, back to
-back, over the whole stored star-formation history. See `documents/onthefly_factcheck.md`.
+**Neither path is an "on-the-fly SED"**: nothing spectral is simulation
+state (`pca_coeffs` lives in `struct GALAXY_OUTPUT`, not runtime `struct
+GALAXY`), and both run at snapshot-output time over the whole stored SFH.
+See `documents/onthefly_factcheck.md`.
 
-Usage
------
-    python scripts/make_pipeline_flowcharts.py
+Usage: python scripts/make_pipeline_flowcharts.py
 """
 
 from pathlib import Path
@@ -42,8 +33,8 @@ OUT_PDF = PROJECT_ROOT / "documents" / "incode_spectra_flowcharts.pdf"
 
 PAGE = (11.69, 8.27)          # landscape A4, inches
 
-# One hue per path, grey for what they share, and an accent reserved for divergences.
-# Chosen to stay distinguishable in greyscale: the fills differ in lightness, not only hue.
+# one hue per path, grey for shared, accent for divergences — fills differ in
+# lightness too, so it stays distinguishable in greyscale
 C_LGAL   = {"fc": "#DCE6F2", "ec": "#2F5597"}
 C_PCA    = {"fc": "#FBE3D6", "ec": "#C55A11"}
 C_SHARED = {"fc": "#EDEDED", "ec": "#666666"}
@@ -52,9 +43,9 @@ C_OUT    = {"fc": "#FFF2CC", "ec": "#BF8F00"}
 C_WARN   = "#C00000"
 
 
-# Geometry, in axes fractions of a 8.27 in page. Box heights are COMPUTED from the
-# content rather than hand-set: the first version of this script hand-sized every box and
-# every one of them overflowed, with the file:line drawn on top of the body text.
+# axes fractions of an 8.27in page. Heights are COMPUTED from content, not
+# hand-set — the first version hand-sized every box and all of them
+# overflowed, drawing the file:line on top of the body text.
 LINE_H  = 0.0152      # one line of body text
 TITLE_H = 0.0225
 REF_H   = 0.0165
@@ -134,8 +125,8 @@ def page(title, subtitle):
 def check_fits(y_bottom, page_name):
     """Fail loudly if the flow ran off the page.
 
-    The first version of this script sized every box by hand and page 1 clipped its last
-    two nodes; nothing complained. Cheap assertion, expensive bug.
+    The first version hand-sized every box; page 1 clipped its last two
+    nodes and nothing complained. Cheap assertion, expensive bug.
     """
     if y_bottom < FLOOR:
         raise SystemExit(
@@ -148,7 +139,7 @@ def footer(ax, text):
             color="#888888", style="italic")
 
 
-# ── The framing line that must appear on every page ─────────────────────────
+# framing line that must appear on every page
 FRAMING = ("Runs at snapshot-output time, over the whole stored SFH.  Nothing spectral is simulation state.  —  documents/onthefly_factcheck.md")
 
 
