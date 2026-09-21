@@ -18,7 +18,7 @@ dev = [
     "pytest",
 ]
 # scripts/colour_cut_calibration.py only (reads the GALFORM lightcone HDF5 + a
-# comparison table). Install with:  pip install -e ".[colour-cut]"
+# comparison table). To install:  pip install -e ".[colour-cut]"
 colour-cut = [
     "h5py",
     "pandas",
