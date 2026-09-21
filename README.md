@@ -4,7 +4,7 @@
 galaxy spectra and computing synthetic photometry from star-formation
 histories, validated against the L-GALAXIES 2020 semi-analytic model catalog.
 
-This is **NOT** yet complete, it will be also aimed be implemented in the GALFORM galaxy simulation.
+This is **NOT** yet complete, it is also aimed to be implemented in the GALFORM galaxy simulation.
 
 ---
 
