@@ -80,7 +80,7 @@ d4000:
 galaxies:
   sample: ../L-GALAXIES/LGalaxies2020_PublicRepository-master/output/samples/Planck_Mil-I_snapshots_default_test3_z0.00-0.00_All.npy
   sfh_table: ../L-GALAXIES/LGalaxies2020_PublicRepository-master/AuxCode/Python/Database_SFH_table.fits
-  bundle: data/webapp_bundle_MilI.npz
+  bundle: data/galaxy_table_MR.npz
   n_galaxies: all
   colour_cut: data/colour_cut_calibration.json
 

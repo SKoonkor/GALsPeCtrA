@@ -13,11 +13,21 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Web app (app/). Install with:  pip install -e ".[webapp]"
-webapp = [
-    "streamlit",
+# Test suite. Install with:  pip install -e ".[dev]"  then run:  pytest
+dev = [
+    "pytest",
+]
+# scripts/colour_cut_calibration.py only (reads the GALFORM lightcone HDF5 + a
+# comparison table). Install with:  pip install -e ".[colour-cut]"
+colour-cut = [
+    "h5py",
     "pandas",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# scripts/ is on the path so tests can import the batch drivers directly.
+pythonpath = ["src", "scripts"]
 
 [build-system]
 requires = ["setuptools"]

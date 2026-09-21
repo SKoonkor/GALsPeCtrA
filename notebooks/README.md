@@ -43,7 +43,7 @@ number**, so the assumption is stated where it can be seen.
 is no fallback to the other tree, by design: a silent fallback would mean every number and
 figure below quietly described a different simulation from the one in the heading.
 
-Millennium-II merger trees live on an external drive and there is no `webapp_bundle_MRII.npz`,
+Millennium-II merger trees live on an external drive and there is no `galaxy_table_MRII.npz`,
 so `TREE = "MRII"` will often be unavailable. That is expected. On this machine today:
 
 | | `TREE = "MRI"` | `TREE = "MRII"` |
@@ -135,9 +135,8 @@ sanity check, not a target to minimise**, because the target is itself approxima
 |---|---|
 | `scripts/verify_pca_onthefly.py` | Hard-codes five Millennium-I values (`:26` output path, `:30` coeffs, `:32` sample, `:90` DM particle mass, and its `SM_res`), and its filename plus two lines still carry the "on-the-fly" phrasing. Would consume `galspectra.trees` |
 | `scripts/validate_by_colour.py:70` | One hard-coded Millennium-I sample path |
-| `scripts/build_webapp_bundle.py` | `:352` coeffs, `:364` sample, `:381` output name. **`:381` is a write target** — the same care applies as to `process_lgalaxies.py --output`; the registry must not fill it in |
-| `hubble_h = 0.673` in six places | `lgalaxies/sfh.py:31`, `photometry/dust.py:120,196`, `process_lgalaxies.py:379`, `build_webapp_bundle.py:53`, `verify_pca_onthefly.py:89`. Not tree-dependent, so it does not belong in `trees.py`, but it deserves a single home of its own |
-| `app/` "PCA On-The-Fly" page | `app/Home.py:22`, `app/pages/2_PCA_On_The_Fly.py` (filename + two titles), `app/lib/plots.py:164`, and `README.md:200` which names the page. One coupled rename, or none |
+| `scripts/build_galaxy_table.py` | `--tree` already selects `MR`/`MRII` by name and writes `galaxy_table_<TREE>.npz`, but `--sample` still defaults to the Millennium-I sample path. Would consume `galspectra.trees` for the default |
+| `hubble_h = 0.673` in six places | `lgalaxies/sfh.py:31`, `photometry/dust.py:120,196`, `process_lgalaxies.py:379`, `build_galaxy_table.py`, `verify_pca_onthefly.py:89`. Not tree-dependent, so it does not belong in `trees.py`, but it deserves a single home of its own |
 - **Numbering.** Two-digit prefix, gaps left. A new rung slots in as `05a` or takes a free
   number rather than forcing a renumber.
 

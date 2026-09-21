@@ -66,7 +66,7 @@ import numpy as np
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 LGAL_ROOT = PROJECT_ROOT.parent / "L-GALAXIES" / "LGalaxies2020_PublicRepository-master"
 
-BUNDLE = PROJECT_ROOT / "data" / "webapp_bundle_MilI.npz"
+BUNDLE = PROJECT_ROOT / "data" / "galaxy_table_MR.npz"
 SOURCE_NPY = LGAL_ROOT / "output/samples/Planck_Mil-I_snapshots_default_test3_z0.00-0.00_All.npy"
 
 BANDS = ["u", "g", "r", "i", "z"]
@@ -136,8 +136,8 @@ def load_data():
                 "H2fraction", "Type", "MassWeightAge", "M_total"):
         d[key] = b[key].astype(float)
 
-    # CosInclination / ColdGasRadius / MetalsColdGas are not in the bundle. They live
-    # in the source sample, which is row-aligned 1:1 (build_webapp_bundle.py asserts
+    # CosInclination / ColdGasRadius / MetalsColdGas are not in the table. They live
+    # in the source sample, which is row-aligned 1:1 (build_galaxy_table.py asserts
     # sequential galaxy_index).
     if SOURCE_NPY.exists():
         G = np.load(SOURCE_NPY)

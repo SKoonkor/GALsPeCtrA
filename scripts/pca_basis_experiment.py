@@ -232,7 +232,7 @@ def build_galaxy_weights(cfg, params, param_names):
 
     out = {"W": W, "info": info, "n": n, "sample": str(sample), "records": records}
 
-    bundle_path = _resolve(gcfg.get("bundle", "data/webapp_bundle_MilI.npz"))
+    bundle_path = _resolve(gcfg.get("bundle", "data/galaxy_table_MR.npz"))
     if bundle_path.exists():
         b = np.load(bundle_path, allow_pickle=True)
         if int(b["n_galaxies"]) == len(G):

@@ -10,7 +10,7 @@ simulation it post-processes cannot disagree about the universe they are in.
 Why this module exists
 ----------------------
 ``hubble_h = 0.673`` had six independent copies — ``lgalaxies/sfh.py``,
-``photometry/dust.py`` (twice), ``process_lgalaxies.py``, ``build_webapp_bundle.py`` and
+``photometry/dust.py`` (twice), ``process_lgalaxies.py``, ``build_galaxy_table.py`` and
 ``verify_pca_onthefly.py``. It is not a per-tree constant, so it does not belong in
 ``trees.py``; it is cosmology, and this is where it goes. Migrating those call sites is a
 separate, mechanical change.

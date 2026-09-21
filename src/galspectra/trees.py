@@ -12,7 +12,7 @@ It deliberately does **not** own:
 
 * ``hubble_h = 0.673`` — identical for both trees. It is cosmology, not tree
   identity. It has six live homes today (``lgalaxies/sfh.py``,
-  ``photometry/dust.py``, ``process_lgalaxies.py``, ``build_webapp_bundle.py``,
+  ``photometry/dust.py``, ``process_lgalaxies.py``, ``build_galaxy_table.py``,
   ``verify_pca_onthefly.py``, and the notebooks) and deserves a single home of
   its own — but putting it here would assert a dependence that does not exist.
 * ``PART_RES = 20.0`` — a resolution criterion in particles, the same for both.

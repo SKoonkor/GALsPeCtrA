@@ -2,16 +2,17 @@
 # data
 data/*
 outputs/
-tests/
+test_results/
 
-# Web app — kept out of version control until the main calculation pipeline is finished
-app/
-scripts/build_webapp_bundle.py
+# NOTE: `tests/` was previously listed here, alongside the regenerated-data paths.
+# It now holds the pytest suite, which must be version-controlled, so it is tracked.
 
-# Internal docs, figures, and agent guidance — not part of the public release
+# Internal docs and figures — not part of the public release
 documents/
 figures/
-CLAUDE.md
+
+# Local, machine-specific files
+local/
 
 # notebooks/
 .ipynb_checkpoints/
