@@ -1,45 +1,27 @@
 """
 colour_cut_calibration.py
 
-Locate the red/blue colour bimodality valley in L-GALAXIES, in the GALFORM PAUS
-lightcone, and in the observed PAUS catalogues, and derive a data-driven cut for
-L-GALAXIES to replace the inherited fixed value.
+Locates the red/blue colour bimodality valley in L-GALAXIES, the GALFORM PAUS
+lightcone, and the observed PAUS catalogues, and derives a data-driven cut
+for L-GALAXIES to replace the inherited fixed value.
 
-Why this exists
----------------
-`scripts/validate_by_colour.py` originally split galaxies at (g-r) >= 0.4, taken from
-the PAUS luminosity function pipeline:
+`scripts/validate_by_colour.py` originally split at (g-r) >= 0.4
+(GALFORM_LF/REFACTORED/galform_lf/observed_lf.py:26), calibrated for the
+GALFORM lightcone over 0 < z < 2, not L-GALAXIES at z = 0 — it misses the
+L-GALAXIES bimodality valley and is not fitted, cited, or plotted anywhere
+in the GALFORM_LF tree. See documents/colour_cut_calibration.md.
 
-    GALFORM_LF/REFACTORED/galform_lf/observed_lf.py:26   RED_BLUE_CUT = 0.4
-
-That cut was calibrated for the **GALFORM lightcone over 0 < z < 2**, not for
-**L-GALAXIES at z = 0**. It does not land in the L-GALAXIES bimodality valley, which
-makes the red fraction unusually sensitive to any small colour shift. This script
-measures where the valley actually is, for each of the three populations, using two
-independent methods.
-
-Nothing in the GALFORM_LF tree justifies the value 0.4: it is not fitted, carries no
-citation, and has no bimodality plot behind it. See documents/colour_cut_calibration.md.
-
-Methods
--------
-KDE valley   Gaussian KDE; the valley is the deepest local minimum between the two
-             highest peaks. Repeated over several bandwidths so stability is visible.
-GMM          Two-component Gaussian mixture; the cut is the equal-posterior point.
-             BIC for 1/2/3 components answers "is it bimodal at all?" rather than
-             assuming it.
-Tilted cut   The GMM repeated in bins of M_r, then fitted with Baldry et al. (2004)'s
-             functional form  a - b * tanh((M_r + c) / d).
+Methods: KDE valley (deepest local minimum between the two highest peaks,
+over several bandwidths); GMM (two-component mixture, cut at equal
+posterior, BIC tests bimodality rather than assuming it); tilted cut (GMM
+per bin of M_r, fitted to Baldry et al. 2004's a - b*tanh((M_r+c)/d)).
 
 Usage:
-  cd /path/to/GALsPeCtrA
   python scripts/colour_cut_calibration.py
   python scripts/colour_cut_calibration.py --n-fields 128 --no-paus
 
-Outputs:
-  data/colour_cut_calibration.json      the calibrated constants, consumed by
-                                        scripts/validate_by_colour.py
-  figures/colour_cut_calibration/figC{1..4}_*.png and .pdf
+Outputs: data/colour_cut_calibration.json (consumed by validate_by_colour.py),
+figures/colour_cut_calibration/figC{1..4}_*.png/.pdf.
 """
 
 import argparse
@@ -54,8 +36,8 @@ GALFORM_LF = RESEARCH_ROOT / "GALFORM_LF"
 LC_DIR = GALFORM_LF / "data" / "LC"
 PAUS_DIR = GALFORM_LF / "data" / "PAUS"
 
-# GALFORM lightcone dataset names. Note the typo'd 'FHT' in the i-band key -- it is
-# genuinely spelled that way in the HDF5 files, not a transcription error here.
+# GALFORM lightcone dataset names. 'FHT' (not 'CFHT') in the i-band key is
+# genuinely how it's spelled in the HDF5 files, not a transcription error.
 LC_G = "mag_CFHT-MegaCam-1st-g_r_tot_ext"
 LC_R = "mag_CFHT-MegaCam-1st-r_r_tot_ext"
 LC_I = "mag_FHT-MegaCam-1st-i_r_tot_ext"
@@ -209,9 +191,9 @@ def load_lgalaxies():
 def load_galform(n_fields=64, z_max=None, seed=0):
     """Rest-frame g-r from the GALFORM LC12 lightcone.
 
-    Each file is a 1/1024 random subsample of a ~100 deg^2 field, so a subset of files
-    is itself a fair random subsample -- fine for a shape measurement, and not to be
-    used for volume-normalised counts without weighting.
+    Each file is a 1/1024 random subsample of a ~100 deg^2 field, so a subset
+    is itself a fair sample — fine for shape, not for volume-normalised
+    counts without weighting.
     """
     import h5py
 
@@ -479,11 +461,11 @@ def main():
 
     if not args.no_galform:
         print(f"GALFORM LC12 ({args.n_fields} fields) ...")
-        # Load the full redshift range; the slices are taken below, not in the loader.
+        # full redshift range loaded; slices taken below, not in the loader
         gf = load_galform(args.n_fields, z_max=None)
         if gf:
-            # Both the low-z slice (like-for-like with an L-GALAXIES z=0 snapshot) and
-            # the full lightcone range the 0.4 cut is actually applied over.
+            # low-z slice (like-for-like with L-GALAXIES z=0) and the full
+            # lightcone range the 0.4 cut is actually applied over
             for tag, sel, note in (
                 ("galform_lowz", gf["z"] <= args.galform_zmax, f"z < {args.galform_zmax}"),
                 ("galform_all", np.ones(gf["colour"].size, bool), "0 < z < 2"),
@@ -504,9 +486,8 @@ def main():
         print("PAUS W1+W3 ...")
         pa = load_paus()
         if pa:
-            # Two slices. The full sample spans 0 < z < 1.2 with heterogeneous
-            # k-corrections; only the low-z slice is a like-for-like comparison with
-            # an L-GALAXIES z = 0 snapshot.
+            # full sample spans 0 < z < 1.2 with heterogeneous k-corrections;
+            # only the low-z slice is like-for-like with an L-GALAXIES z=0 snapshot
             for tag, sel, note in (
                 ("paus_all", np.ones(pa["colour"].size, bool), "all z"),
                 ("paus_lowz", pa["z"] <= args.galform_zmax, f"z < {args.galform_zmax}"),
@@ -533,8 +514,8 @@ def main():
         tilt[flavour] = tilted_cut(lg[flavour]["colour"][sel], lg[flavour]["mag"][sel], mag_bins)
         f = tilt[flavour]["baldry_fit"]
         if f and "a" in f:
-            # d << 1 means tanh has collapsed to a step: the fit is interpolating noise
-            # across too few bins rather than measuring a real luminosity trend.
+            # d << 1: tanh collapsed to a step — interpolating noise across too
+            # few bins, not measuring a real luminosity trend
             f["reliable"] = bool(f["d"] > 0.3 and f["rms_resid"] < 0.05)
             print(f"  {flavour:<10} {f['a']:.4f} - {f['b']:.4f} tanh((M_r + {f['c']:.3f})"
                   f" / {f['d']:.3f})   rms {f['rms_resid']:.4f}  "
@@ -578,10 +559,9 @@ def main():
               f"f_red {r['native_red_frac']:.4f} -> {r['synth_red_frac']:.4f}  "
               f"shift {r['shift']:+.4f}   blue->red {r['blue_to_red']:,}  "
               f"red->blue {r['red_to_blue']:,}")
-    # Report the minimum over the DEFENSIBLE range only. The shift falls towards the
-    # extremes of the scan simply because almost every galaxy ends up on one side of
-    # the cut there, leaving nothing near the boundary to migrate; those endpoints are
-    # degenerate, not evidence that the bias can be tuned away.
+    # minimum over the DEFENSIBLE range only: the shift falls toward the scan's
+    # extremes simply because almost everyone ends up on one side there (degenerate
+    # endpoints, not evidence the bias can be tuned away)
     band = [r for r in curves["dust"] if 0.40 <= r["cut"] <= 0.55]
     mn, mx = min(band, key=lambda r: r["shift"]), max(band, key=lambda r: r["shift"])
     print(f"\n  Over the defensible range 0.40-0.55 (valley +/- 0.075):")
