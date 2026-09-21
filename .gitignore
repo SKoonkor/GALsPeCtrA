@@ -5,7 +5,7 @@ outputs/
 test_results/
 
 # NOTE: `tests/` was previously listed here, alongside the regenerated-data paths.
-# It now holds the pytest suite, which must be version-controlled, so it is tracked.
+# It now holds the pytest suite, which must be version-controlled.
 
 # Internal docs and figures — not part of the public release
 documents/
