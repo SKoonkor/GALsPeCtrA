@@ -1,20 +1,7 @@
 """
-Structural guarantees of the spectral basis.
-
-These are not accuracy tests. They assert the two properties the whole GALsPeCtrA
-architecture rests on, both of which fail *silently* when broken:
-
-1. **Reconstruction is linear in flux**, so a composite stellar population is the
-   mass-weighted sum of its simple populations. Break this and every per-SSP check
-   still passes while every galaxy comes out wrong.
-
-2. **The mean term is scaled by total formed stellar mass.** Break this and the
-   result is wrong by a factor that depends on how many SSPs went into the sum, which
-   looks like a mass-dependent bias rather than a bug.
-
-They run on a small synthetic library where possible, so they are fast and do not
-depend on any data product; the tests that need the real library skip cleanly when
-it is absent.
+Structural guarantees of the spectral basis: reconstruction is linear in
+flux, and the mean term is scaled by total formed mass. Runs on a small
+synthetic library where possible; tests needing the real library skip if absent.
 """
 
 from __future__ import annotations
@@ -47,12 +34,7 @@ LGAL_FILTERS = (
 
 @pytest.fixture(scope="module")
 def synthetic_library():
-    """A small, strictly positive, smoothly varying stand-in for an SSP grid.
-
-    Built from blackbody-like curves of varying temperature and slope so that it has
-    genuine low-rank structure — a PCA of pure noise would make the truncation tests
-    meaningless.
-    """
+    """A small, strictly positive, smoothly varying stand-in for an SSP grid."""
     rng = np.random.default_rng(20260806)
     wave = np.geomspace(1200.0, 22000.0, 260)
     temps = np.geomspace(2500.0, 40000.0, 40)
@@ -87,11 +69,7 @@ def real_library():
 
 @pytest.mark.parametrize("scheme", ["uniform", "inverse_std", "inverse_rms", "inverse_mean"])
 def test_composition_is_exact_to_machine_precision(synthetic_library, scheme):
-    """recon(Σ mᵢcᵢ, Σ mᵢ) == Σ mᵢ · recon(cᵢ, 1).
-
-    This is the identity the whole architecture depends on. It should hold to
-    floating-point round-off, not approximately.
-    """
+    """recon(Σ mᵢcᵢ, Σ mᵢ) == Σ mᵢ · recon(cᵢ, 1), to machine precision."""
     wave, X = synthetic_library
     basis = SpectralBasis.fit(wave, X, 20, weight_scheme=scheme)
     coeffs = basis.transform(X)
@@ -111,12 +89,7 @@ def test_composition_is_exact_to_machine_precision(synthetic_library, scheme):
 
 
 def test_composition_holds_for_arbitrary_subsets(synthetic_library):
-    """Linearity must hold for any subset, not just the whole library.
-
-    The production pipeline splits each galaxy into young/old x disk/bulge and
-    reconstructs the four pieces separately before adding them, so partial sums have
-    to compose exactly too.
-    """
+    """Linearity holds for any subset, not just the whole library."""
     wave, X = synthetic_library
     basis = SpectralBasis.fit(wave, X, 25, weight_scheme="inverse_rms")
     coeffs = basis.transform(X)
@@ -142,12 +115,7 @@ def test_reconstruction_scales_linearly_with_mass(synthetic_library):
 
 
 def test_weights_are_divided_back_out(synthetic_library):
-    """The stored basis must be in flux units, not weighted units.
-
-    Two bases fitted with different weightings, both truncated to the full rank of
-    the library, must reconstruct the same spectra. If a weighting were left baked
-    into the components, they would not.
-    """
+    """The stored basis is in flux units: different weightings, same reconstruction."""
     wave, X = synthetic_library
     n = min(X.shape) - 1
     a = SpectralBasis.fit(wave, X, n, weight_scheme="uniform")
@@ -158,13 +126,7 @@ def test_weights_are_divided_back_out(synthetic_library):
 
 
 def test_overall_weight_scale_cancels(synthetic_library):
-    """Scaling every weight by a constant must not change the reconstruction.
-
-    `normalise` rescales the weight vector so its geometric mean is 1, which is a
-    pure constant factor. The stored components and coefficients do change — they
-    scale by 1/k and k — but the product that reconstruction actually uses does not,
-    and neither does the mean term.
-    """
+    """Scaling every weight by a constant doesn't change the reconstruction."""
     wave, X = synthetic_library
     a = SpectralBasis.fit(wave, X, 12, weight_scheme="inverse_rms",
                           weight_kwargs={"normalise": True})
@@ -222,12 +184,7 @@ def test_every_permitted_scheme_yields_positive_finite_weights(synthetic_library
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_dropping_the_mass_term_is_catastrophic(synthetic_library):
-    """Omitting M from the mean term must change the answer by far more than 1 %.
-
-    This is the test that makes the mass term demonstrably load-bearing rather than
-    decorative. If someone "simplifies" reconstruct() back to `mean + c @ B`, this
-    fails loudly.
-    """
+    """Omitting M from the mean term changes the answer by far more than 1%."""
     wave, X = synthetic_library
     basis = SpectralBasis.fit(wave, X, 20, weight_scheme="inverse_std")
     coeffs = basis.transform(X)
@@ -268,10 +225,7 @@ def test_bytes_accounting_counts_the_mass(synthetic_library):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_truncation_matches_a_refit(synthetic_library):
-    """PCA components are nested, so truncating must equal refitting at that N.
-
-    The error-vs-bytes curve relies on this: every point is a truncation of one fit.
-    """
+    """Truncating a fit equals refitting at that N (PCA components are nested)."""
     wave, X = synthetic_library
     full = SpectralBasis.fit(wave, X, 30, weight_scheme="inverse_rms")
     trunc = full.truncate(8)
@@ -297,8 +251,7 @@ def test_save_load_round_trip(synthetic_library, tmp_path):
 
 
 def test_load_rejects_an_unversioned_file(tmp_path):
-    """The committed binary grid has no magic number and a stale one loads silently.
-    The new format refuses that."""
+    """A file with no format-version marker is rejected."""
     p = tmp_path / "bogus.npz"
     np.savez(p, wave=np.arange(3.0), mu_eff=np.zeros(3), components=np.zeros((1, 3)),
              weights=np.ones(3))
@@ -362,12 +315,7 @@ def test_cumulative_integral_matches_trapezoid():
 
 @pytest.mark.skipif(not LGAL_FILTERS.exists(), reason="L-GALAXIES filter directory absent")
 def test_band_operator_reproduces_production_magnitudes(real_library):
-    """BandOperator is an optimisation, so it must agree with the code it replaces.
-
-    `compute_ab_magnitudes` is the production photometry. If these two ever diverge,
-    every number the experiment harness produces becomes incomparable with the
-    validated pipeline.
-    """
+    """BandOperator agrees with compute_ab_magnitudes, the production photometry."""
     from galspectra.photometry.filter_sets import load_filter_set
     from galspectra.photometry.synthetic import compute_ab_magnitudes
 
@@ -386,11 +334,7 @@ def test_band_operator_reproduces_production_magnitudes(real_library):
 
 
 def test_band_flux_composes_linearly(synthetic_library):
-    """Band flux of a sum must equal the sum of band fluxes.
-
-    This is what lets the harness evaluate galaxy photometry without ever building a
-    galaxy spectrum.
-    """
+    """Band flux of a sum equals the sum of band fluxes."""
     from galspectra.photometry.filter_sets import load_filter_set
 
     wave, X = synthetic_library
@@ -427,11 +371,7 @@ def test_band_operator_rejects_uncovered_bands(synthetic_library):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_d4000_is_a_ratio_of_linear_functionals(synthetic_library):
-    """D4000 of a composite must follow from the composite's window fluxes.
-
-    D4000 itself is not linear (it is a ratio), but both windows are, which is what
-    the harness relies on when it evaluates galaxy-level D4000 as W @ (X @ opᵀ).
-    """
+    """D4000 of a composite follows from the composite's window fluxes."""
     wave, X = synthetic_library
     op = d4000_operator(wave, "D4000_n")
     rng = np.random.default_rng(23)
@@ -468,30 +408,8 @@ def test_d4000_of_real_ssps_is_physical(real_library):
 
 BUNDLE = PROJECT_ROOT / "data" / "galaxy_table_MR.npz"
 
-# Re-measured from the regenerated product on 2026-08-07, after the migration to
-# photon counting (documents/filter_convention.md). These pin the *validated*
-# agreement between the GALsPeCtrA pipeline and L-GALAXIES' own photometry, so
-# that a future basis swap cannot quietly degrade it. The claim they guard is now
-# **0.001-0.017 mag**, not the 0.01-0.03 mag of the energy-weighted era.
-#
-# Two changes from the previous block, both deliberate:
-#
-#   * The second number is now a **true MAD** — median(|Δ − median Δ|) — where it
-#     used to be median(|Δ|). The old quantity was not a scatter at all: every
-#     residual here has the same sign, so median(|Δ|) simply repeated the median
-#     and the second pin was doing no work. The scatter is the part a basis change
-#     would move first, so it is worth pinning separately.
-#   * The values come from the regenerated bundle, not from the predicted table in
-#     filter_convention.md §5.3. The prediction reproduced g, r, i and z to better
-#     than half a millimagnitude but overstated u by 3 mmag, which is exactly why
-#     a pin is measured rather than forecast.
-#
-# Measured 2026-08-07 (median, true MAD):
-#   u +0.0147, 0.0022    g +0.0167, 0.0058    r +0.0039, 0.0019
-#   i +0.0032, 0.0018    z +0.0008, 0.0007
-# Pins carry roughly 2-3x headroom, so a legitimate refinement does not fail them
-# while a regression of the size the migration just removed would.
-_MAG_PIN = {          # band: (max allowed |median Δ|, max allowed MAD)
+# per-band pin: (max allowed |median Δ|, max allowed MAD) against native L-GALAXIES
+_MAG_PIN = {
     "u": (0.030, 0.006),
     "g": (0.035, 0.012),
     "r": (0.010, 0.004),
@@ -520,11 +438,7 @@ def test_intrinsic_magnitude_agreement_pin(band):
 
 @pytest.mark.skipif(not BUNDLE.exists(), reason="galaxy table absent")
 def test_stored_coefficients_are_not_self_contained():
-    """`pca_coeffs` alone cannot reconstruct a galaxy — the mass is a separate number.
-
-    Asserted rather than merely noted, so the day someone makes the product
-    self-contained this test fails and is deliberately updated.
-    """
+    """`pca_coeffs` alone cannot reconstruct a galaxy — the mass is a separate number."""
     d = np.load(BUNDLE, allow_pickle=True)
     assert "pca_coeffs" in d
     assert "M_total" in d, (
@@ -537,24 +451,13 @@ def test_stored_coefficients_are_not_self_contained():
 
 # ─────────────────────────────────────────────────────────────────────────────
 # The filter convolution convention
-#
-# Adopted 7 August 2026 by measurement (documents/filter_convention.md): photon
-# counting reproduces L-GALAXIES' own PhotTables better than energy weighting in
-# 30 of 40 bands. Nothing pinned the convention before, which is how the project
-# ran for months on a choice nobody had made deliberately.
 # ─────────────────────────────────────────────────────────────────────────────
 
 ARCHIVE = PROJECT_ROOT / "data" / "pre_photon_energy_convention"
 
 
 def test_lgal_native_is_a_diagnostic_and_never_a_default():
-    """The quadrature port must stay out of the legitimate choices.
-
-    `lgal_native` reproduces three defects in the C routine that writes L-GALAXIES'
-    photometric tables (`documents/lgalaxies_quadrature.md`). It exists to measure the
-    disagreement, and a magnitude computed with it is wrong on purpose. Keeping it out
-    of `CONVENTIONS` keeps it out of anything that iterates the real options.
-    """
+    """`lgal_native` stays out of CONVENTIONS and out of DEFAULT_CONVENTION."""
     from galspectra.photometry import synthetic
     assert "lgal_native" not in synthetic.CONVENTIONS
     assert "lgal_native" in synthetic.DIAGNOSTIC_CONVENTIONS
@@ -563,12 +466,7 @@ def test_lgal_native_is_a_diagnostic_and_never_a_default():
 
 @pytest.mark.skipif(not LGAL_FILTERS.exists(), reason="L-GALAXIES filter directory absent")
 def test_lgal_native_reproduces_the_c_quadrature_matrix_form(real_library):
-    """The matrix form and the literal port must agree.
-
-    `lgal_band_matrix` is what makes the 221 x 6 x 40 decomposition tractable; it is
-    only trustworthy if it equals `compute_lgal_magnitudes`, which is the line-by-line
-    port of the C. Same relationship as `BandOperator` to `compute_ab_magnitudes`.
-    """
+    """lgal_band_matrix (matrix form) agrees with compute_lgal_magnitudes (literal port)."""
     from galspectra.photometry.filter_sets import load_filter_set
     from galspectra.photometry.lgal_quadrature import (
         compute_lgal_magnitudes, lgal_band_matrix, lgal_magnitudes_from_matrix,
@@ -588,13 +486,7 @@ def test_lgal_native_reproduces_the_c_quadrature_matrix_form(real_library):
 
 @pytest.mark.skipif(not LGAL_FILTERS.exists(), reason="L-GALAXIES filter directory absent")
 def test_lgal_native_differs_from_production_in_the_measured_direction(real_library):
-    """The port must actually be a different integral, and differ by the right amount.
-
-    Measured over the full grid, reproducing L-GALAXIES' quadrature takes the SDSS
-    residual against its own tables from 6.8 mmag to 2e-6 mag. Here the cheap version:
-    on one old SSP the two must disagree by a few millimagnitudes, not by nothing (the
-    port would then be a no-op) and not by tenths (it would be broken).
-    """
+    """lgal_native differs from production by a few mmag — neither zero nor tenths."""
     from galspectra.photometry.filter_sets import load_filter_set
     from galspectra.photometry.synthetic import compute_ab_magnitudes
 
@@ -613,27 +505,14 @@ def test_lgal_native_differs_from_production_in_the_measured_direction(real_libr
 
 
 def test_default_convention_is_photon():
-    """The adopted convention, asserted so a revert cannot be silent.
-
-    Flipping this back would move every magnitude in every product without
-    changing a single line of analysis code — exactly the class of change that
-    must not happen by accident.
-    """
+    """DEFAULT_CONVENTION is 'photon'; 'energy' stays selectable."""
     from galspectra.photometry.synthetic import CONVENTIONS, DEFAULT_CONVENTION
     assert DEFAULT_CONVENTION == "photon"
-    assert "energy" in CONVENTIONS, (
-        "energy must stay selectable: it is what every product before 7 Aug 2026 "
-        "used, and documents/filter_convention.md compares the two")
+    assert "energy" in CONVENTIONS
 
 
 def test_the_two_photometry_entry_points_share_one_default():
-    """`BandOperator` must not carry its own copy of the default.
-
-    The operator is the fast matrix path; `compute_ab_magnitudes` is production.
-    If they could disagree about the convention, every harness number would
-    silently stop being comparable with the validated pipeline and no test would
-    fail. Identity, not equality of two literals.
-    """
+    """BandOperator and compute_ab_magnitudes share one DEFAULT_CONVENTION object."""
     from galspectra.photometry import synthetic
     from galspectra.pca import metrics
     assert metrics.DEFAULT_CONVENTION is synthetic.DEFAULT_CONVENTION
@@ -659,13 +538,7 @@ def test_band_operator_matches_production_under_both_conventions(real_library, c
 
 @pytest.mark.skipif(not LGAL_FILTERS.exists(), reason="L-GALAXIES filter directory absent")
 def test_photon_counting_is_bluer_for_old_populations(real_library):
-    """The conventions differ in the direction the measurement found, not just at all.
-
-    Energy weighting over-weights the red side of a passband relative to a photon
-    counter, so it reports an old, red population as redder than it is. That sign
-    is the whole reason the migration improves the *g−r* agreement, and a change
-    that reversed it would be a bug that a magnitude-only check would miss.
-    """
+    """Photon counting gives a bluer g-r than energy weighting for old populations."""
     from galspectra.photometry.filter_sets import load_filter_set
     from galspectra.photometry.synthetic import compute_ab_magnitudes
 
@@ -685,15 +558,7 @@ def test_photon_counting_is_bluer_for_old_populations(real_library):
 @pytest.mark.skipif(not (ARCHIVE / "lgalaxies_sed_coeffs_bc03.npz").exists(),
                     reason="pre-migration archive absent")
 def test_migration_moved_photometry_and_nothing_else():
-    """The convention changed the magnitudes and left the compression untouched.
-
-    `pca_coeffs` is upstream of the filters, so it must be **bit-identical** across
-    the migration. If it ever is not, something other than the convention moved and
-    every downstream number is suspect.
-
-    The per-band shifts are pinned loosely, in the measured direction: every band
-    got brighter, most in *g*, least in *z*.
-    """
+    """pca_coeffs is bit-identical across the energy->photon migration; magnitudes shift."""
     old = np.load(ARCHIVE / "lgalaxies_sed_coeffs_bc03.npz", allow_pickle=True)
     new = np.load(PROJECT_ROOT / "data" / "lgalaxies_sed_coeffs_bc03.npz", allow_pickle=True)
 
