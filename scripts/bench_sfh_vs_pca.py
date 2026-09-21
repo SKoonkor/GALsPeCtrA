@@ -47,8 +47,8 @@ def storage_report():
     total = S.itemsize
     sfh_fields = [n for n in S.names if n.startswith("sfh_")]
     sfh_bytes = sum(S[n].itemsize for n in sfh_fields)
-    # The subset a re-derivation of the spectrum actually needs: mass and metals, per
-    # component. The ring and element arrays are not usable by a single-Z SSP library.
+    # subset a spectrum re-derivation needs: mass + metals, disk/bulge (ring and
+    # element arrays aren't usable by a single-Z SSP library)
     needed = ("sfh_DiskMass", "sfh_BulgeMass", "sfh_MetalsDiskMass", "sfh_MetalsBulgeMass")
     need_bytes = sum(S[n].itemsize for n in needed)
     pca_bytes = sum(S[n].itemsize for n in S.names if "pca" in n)
@@ -99,9 +99,9 @@ def compute_report(n_gal, n_bins, repeats):
                 * nstd[None, :] + nmean[None, :]) * masses[:, None]
 
     def route_sfh():
-        # Bilinear weights over the (age, Z) library, accumulated into one sparse
-        # operator per galaxy — the same construction pca_basis_experiment.py's
-        # binned-SFH baseline uses — then a single matmul.
+        # bilinear weights over the (age, Z) library into one sparse operator per
+        # galaxy (same construction pca_basis_experiment.py's binned-SFH baseline
+        # uses), then a single matmul
         W = np.zeros((n_gal, library.shape[0]))
         ai = np.clip(np.searchsorted(ages, a) - 1, 0, len(ages) - 2)
         zi = np.clip(np.searchsorted(zs, z) - 1, 0, len(zs) - 2)
@@ -115,9 +115,8 @@ def compute_report(n_gal, n_bins, repeats):
         return W @ library
 
     def best_of(fn):
-        # Warm up before timing. Without this the first PCA call carries its
-        # allocation and BLAS start-up and the route looks ~3x slower than it is,
-        # which understates the gap rather than flattering it.
+        # warm up before timing: without this, PCA's first call carries allocation
+        # + BLAS start-up and looks ~3x slower than it is — understates the gap
         fn()
         return min(_timed(fn) for _ in range(repeats))
 
