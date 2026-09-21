@@ -1,8 +1,10 @@
 # GALsPeCtrA
 
-**GAL**axy **S**p**eCtrA** — a PCA-based pipeline for reconstructing synthetic
+**GAL**axy s**P**e**C**tr**A**: a PCA-based pipeline for reconstructing synthetic
 galaxy spectra and computing synthetic photometry from star-formation
 histories, validated against the L-GALAXIES 2020 semi-analytic model catalog.
+
+This is **NOT** yet complete, it will be also aimed be implemented in the GALFORM galaxy simulation.
 
 ---
 
@@ -74,7 +76,7 @@ and filter directory. `--sample` and `--output` are required, with no defaults.
 
 Run all scripts from the project root.
 
-### 1 — Generate the SSP SED grid
+### 1 Generate the SSP SED grid
 
 ```bash
 python scripts/generate_seds_bc03.py
@@ -85,7 +87,7 @@ Output: `data/sed_grid_bc03.npz`. Flags: `--bc03-dir`, `--n-ages` (default 200),
 
 An FSPS backend is also available: `python scripts/generate_seds.py`.
 
-### 2 — Run PCA
+### 2 Run PCA
 
 ```bash
 python scripts/run_pca_evalgrid.py \
@@ -99,7 +101,7 @@ Produces the basis used everywhere downstream, including the L-GALAXIES export.
 Use this script, not `scripts/run_pca.py` (a native-grid general-purpose fitter
 that the committed basis is not built from).
 
-### 3 — Process an L-GALAXIES catalog
+### 3 Process an L-GALAXIES catalog
 
 ```bash
 python scripts/process_lgalaxies.py --backend bc03 \
@@ -115,7 +117,7 @@ dust-model redshift).
 For every output redshift in a run: `scripts/run_multiz_coeffs.sh` loops this
 script over all of them.
 
-### 4 — Validate
+### 4 Validate
 
 ```bash
 jupyter notebook notebooks/05_validate_against_lgalaxies.ipynb
@@ -123,7 +125,7 @@ jupyter notebook notebooks/05_validate_against_lgalaxies.ipynb
 
 See `notebooks/README.md` for the full notebook ladder.
 
-### In-code L-GALAXIES integration
+### L-GALAXIES integration
 
 `scripts/export_pca_for_lgalaxies.py` writes the PCA(age, Z) grid as a binary
 L-GALAXIES reads directly, computing PCA coefficients in-code at output time.
